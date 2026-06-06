@@ -1,0 +1,962 @@
+// ============================================================
+// SaleAssist.ai Clone — Prisma Schema
+// Full database schema with multi-tenancy support
+// ============================================================
+
+generator client {
+  provider        = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────────────────
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_OWNER
+  ADMIN
+  MANAGER
+  AGENT
+  VIEWER
+}
+
+enum TenantPlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  TRIAL
+  CANCELLED
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum VideoCallStatus {
+  WAITING
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  CANCELLED
+}
+
+enum VideoCallType {
+  INBOUND
+  OUTBOUND
+  SCHEDULED
+}
+
+enum LiveStreamStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+enum ShoppableVideoStatus {
+  DRAFT
+  PROCESSING
+  PUBLISHED
+  ARCHIVED
+}
+
+enum VideoFaqStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum LeadSource {
+  VIDEO_CALL
+  LIVE_STREAM
+  AI_CHAT
+  SHOPPABLE_VIDEO
+  WIDGET
+  MANUAL
+  IMPORT
+}
+
+enum DealStage {
+  PROSPECTING
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+}
+
+enum ChatMessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+enum BillingProvider {
+  STRIPE
+  RAZORPAY
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  PAUSED
+  TRIALING
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum WidgetPosition {
+  BOTTOM_RIGHT
+  BOTTOM_LEFT
+  TOP_RIGHT
+  TOP_LEFT
+}
+
+enum NotificationType {
+  VIDEO_CALL_INCOMING
+  VIDEO_CALL_MISSED
+  LEAD_ASSIGNED
+  TEAM_INVITE
+  BILLING_ALERT
+  SYSTEM
+}
+
+enum VisitorEventType {
+  PAGE_VIEW
+  WIDGET_OPEN
+  VIDEO_CALL_REQUEST
+  CHAT_START
+  VIDEO_WATCH
+  PRODUCT_CLICK
+  FORM_SUBMIT
+}
+
+// ─────────────────────────────────────────────────────────
+// TENANT & AUTH
+// ─────────────────────────────────────────────────────────
+
+model Tenant {
+  id                String       @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String       @unique
+  domain            String?      @unique
+  logo              String?
+  plan              TenantPlan   @default(FREE)
+  status            TenantStatus @default(TRIAL)
+  trialEndsAt       DateTime?
+  settings          Json         @default("{}")
+  metadata          Json         @default("{}")
+  maxAgents         Int          @default(2)
+  maxMonthlyMinutes Int          @default(100)
+  maxStorageGb      Int          @default(5)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           TenantUser[]
+  invitations     Invitation[]
+  videoCalls      VideoCall[]
+  liveStreams      LiveStream[]
+  shoppableVideos ShoppableVideo[]
+  videoFaqs       VideoFaq[]
+  aiChatSessions  AiChatSession[]
+  contacts        Contact[]
+  companies       Company[]
+  deals           Deal[]
+  leads           Lead[]
+  visitors        Visitor[]
+  widgetConfigs   WidgetConfig[]
+  subscriptions   Subscription[]
+  invoices        Invoice[]
+  apiKeys         ApiKey[]
+  roles           CustomRole[]
+  tags            Tag[]
+  notifications   Notification[]
+  usageRecords    UsageRecord[]
+  activities      Activity[]
+
+  @@index([slug])
+  @@index([status])
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  emailVerified DateTime?
+  passwordHash  String?
+  name          String
+  avatar        String?
+  phone         String?
+  isSuperAdmin  Boolean   @default(false)
+  lastLoginAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenants       TenantUser[]
+  refreshTokens RefreshToken[]
+  accounts      Account[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String @id @default(uuid()) @db.Uuid
+  userId            String @db.Uuid
+  provider          String
+  providerAccountId String
+  accessToken       String?
+  refreshToken      String?
+  expiresAt         Int?
+  tokenType         String?
+  scope             String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model TenantUser {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  userId       String   @db.Uuid
+  role         UserRole @default(AGENT)
+  customRoleId String?  @db.Uuid
+  isActive     Boolean  @default(true)
+  isAvailable  Boolean  @default(false)
+
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  customRole CustomRole? @relation(fields: [customRoleId], references: [id])
+
+  videoCallParticipants VideoCallParticipant[]
+  assignedLeads         Lead[]                @relation("AssignedAgent")
+  ownedDeals            Deal[]                @relation("DealOwner")
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([tenantId, isAvailable])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  token     String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Invitation {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @db.Uuid
+  email           String
+  role            UserRole         @default(AGENT)
+  status          InvitationStatus @default(PENDING)
+  token           String           @unique
+  invitedByUserId String           @db.Uuid
+  expiresAt       DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([token])
+  @@index([email])
+}
+
+// ─────────────────────────────────────────────────────────
+// RBAC
+// ─────────────────────────────────────────────────────────
+
+model CustomRole {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  name        String
+  description String?
+  permissions String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantUsers TenantUser[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+// ─────────────────────────────────────────────────────────
+// VIDEO CALLS
+// ─────────────────────────────────────────────────────────
+
+model VideoCall {
+  id              String          @id @default(uuid()) @db.Uuid
+  tenantId        String          @db.Uuid
+  roomName        String          @unique
+  type            VideoCallType   @default(INBOUND)
+  status          VideoCallStatus @default(WAITING)
+  scheduledAt     DateTime?
+  visitorId       String?         @db.Uuid
+  visitorName     String?
+  visitorEmail    String?
+  visitorPhone    String?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
+  recordingUrl    String?
+  transcriptUrl   String?
+  summary         String?
+  routingMethod   String?
+  queuePosition   Int?
+  metadata        Json            @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visitor      Visitor?              @relation(fields: [visitorId], references: [id])
+  participants VideoCallParticipant[]
+  lead         Lead?
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([roomName])
+  @@index([visitorId])
+}
+
+model VideoCallParticipant {
+  id           String  @id @default(uuid()) @db.Uuid
+  videoCallId  String  @db.Uuid
+  tenantUserId String? @db.Uuid
+  role         String  @default("agent")
+  joinedAt     DateTime?
+  leftAt       DateTime?
+
+  videoCall  VideoCall  @relation(fields: [videoCallId], references: [id], onDelete: Cascade)
+  tenantUser TenantUser? @relation(fields: [tenantUserId], references: [id])
+
+  @@index([videoCallId])
+}
+
+// ─────────────────────────────────────────────────────────
+// LIVE STREAMING
+// ─────────────────────────────────────────────────────────
+
+model LiveStream {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @db.Uuid
+  title           String
+  description     String?
+  thumbnailUrl    String?
+  roomName        String           @unique
+  status          LiveStreamStatus @default(SCHEDULED)
+  scheduledAt     DateTime?
+  isShoppable     Boolean          @default(false)
+  allowChat       Boolean          @default(true)
+  maxViewers      Int?
+  peakViewers     Int              @default(0)
+  totalViewers    Int              @default(0)
+  startedAt       DateTime?
+  endedAt         DateTime?
+  durationSeconds Int?
+  recordingUrl    String?
+  metadata        Json             @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products     LiveStreamProduct[]
+  chatMessages LiveStreamChat[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model LiveStreamProduct {
+  id           String     @id @default(uuid()) @db.Uuid
+  liveStreamId String     @db.Uuid
+  productName  String
+  productUrl   String
+  productImage String?
+  price        Decimal?   @db.Decimal(10, 2)
+  currency     String     @default("USD")
+  displayOrder Int        @default(0)
+  featuredAt   DateTime?
+  clicks       Int        @default(0)
+
+  liveStream LiveStream @relation(fields: [liveStreamId], references: [id], onDelete: Cascade)
+
+  @@index([liveStreamId])
+}
+
+model LiveStreamChat {
+  id            String  @id @default(uuid()) @db.Uuid
+  liveStreamId  String  @db.Uuid
+  senderName    String
+  senderId      String?
+  message       String
+  isHighlighted Boolean @default(false)
+  isPinned      Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  liveStream LiveStream @relation(fields: [liveStreamId], references: [id], onDelete: Cascade)
+
+  @@index([liveStreamId])
+  @@index([liveStreamId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────
+// SHOPPABLE VIDEOS
+// ─────────────────────────────────────────────────────────
+
+model ShoppableVideo {
+  id           String               @id @default(uuid()) @db.Uuid
+  tenantId     String               @db.Uuid
+  title        String
+  description  String?
+  videoUrl     String
+  thumbnailUrl String?
+  duration     Int?
+  status       ShoppableVideoStatus @default(DRAFT)
+  displayType  String               @default("carousel")
+  autoplay     Boolean              @default(false)
+  loop         Boolean              @default(true)
+  muted        Boolean              @default(true)
+  views        Int                  @default(0)
+  clicks       Int                  @default(0)
+  conversions  Int                  @default(0)
+  metadata     Json                 @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  hotspots VideoHotspot[]
+  tags     VideoTag[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model VideoHotspot {
+  id           String  @id @default(uuid()) @db.Uuid
+  videoId      String  @db.Uuid
+  productName  String
+  productUrl   String
+  productImage String?
+  price        Decimal? @db.Decimal(10, 2)
+  currency     String   @default("USD")
+  startTime    Float
+  endTime      Float
+  posX         Float?
+  posY         Float?
+  width        Float?
+  height       Float?
+  impressions  Int      @default(0)
+  clicks       Int      @default(0)
+
+  video ShoppableVideo @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@index([videoId])
+  @@index([videoId, startTime, endTime])
+}
+
+// ─────────────────────────────────────────────────────────
+// VIDEO FAQ
+// ─────────────────────────────────────────────────────────
+
+model VideoFaq {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  title        String
+  description  String?
+  status       VideoFaqStatus @default(DRAFT)
+  displayOrder Int            @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  items  VideoFaqItem[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model VideoFaqItem {
+  id           String  @id @default(uuid()) @db.Uuid
+  faqId        String  @db.Uuid
+  question     String
+  videoUrl     String
+  thumbnailUrl String?
+  duration     Int?
+  displayOrder Int     @default(0)
+  views        Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  faq VideoFaq @relation(fields: [faqId], references: [id], onDelete: Cascade)
+
+  @@index([faqId])
+}
+
+// ─────────────────────────────────────────────────────────
+// AI CHAT
+// ─────────────────────────────────────────────────────────
+
+model AiChatSession {
+  id           String  @id @default(uuid()) @db.Uuid
+  tenantId     String  @db.Uuid
+  visitorId    String? @db.Uuid
+  title        String?
+  model        String  @default("gpt-4o")
+  systemPrompt String?
+  totalTokens  Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  visitor  Visitor?        @relation(fields: [visitorId], references: [id])
+  messages AiChatMessage[]
+
+  @@index([tenantId])
+  @@index([visitorId])
+}
+
+model AiChatMessage {
+  id         String          @id @default(uuid()) @db.Uuid
+  sessionId  String          @db.Uuid
+  role       ChatMessageRole
+  content    String
+  tokensUsed Int?
+  metadata   Json            @default("{}")
+
+  createdAt DateTime @default(now())
+
+  session AiChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sessionId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────
+// CRM
+// ─────────────────────────────────────────────────────────
+
+model Contact {
+  id           String      @id @default(uuid()) @db.Uuid
+  tenantId     String      @db.Uuid
+  email        String?
+  phone        String?
+  firstName    String
+  lastName     String?
+  avatar       String?
+  title        String?
+  companyId    String?     @db.Uuid
+  source       LeadSource?
+  tags         String[]
+  customFields Json        @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  company    Company?      @relation(fields: [companyId], references: [id])
+  leads      Lead[]
+  deals      DealContact[]
+  activities Activity[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([tenantId, email])
+}
+
+model Company {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @db.Uuid
+  name         String
+  domain       String?
+  industry     String?
+  size         String?
+  logo         String?
+  address      Json?
+  customFields Json   @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contacts Contact[]
+  deals    Deal[]
+
+  @@unique([tenantId, domain])
+  @@index([tenantId])
+}
+
+model Deal {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  title           String
+  value           Decimal?  @db.Decimal(12, 2)
+  currency        String    @default("USD")
+  stage           DealStage @default(PROSPECTING)
+  probability     Int?      @default(0)
+  expectedCloseAt DateTime?
+  ownerId         String?   @db.Uuid
+  companyId       String?   @db.Uuid
+  customFields    Json      @default("{}")
+  closedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner      TenantUser?  @relation("DealOwner", fields: [ownerId], references: [id])
+  company    Company?     @relation(fields: [companyId], references: [id])
+  contacts   DealContact[]
+  activities Activity[]
+
+  @@index([tenantId])
+  @@index([tenantId, stage])
+  @@index([ownerId])
+}
+
+model DealContact {
+  id        String @id @default(uuid()) @db.Uuid
+  dealId    String @db.Uuid
+  contactId String @db.Uuid
+  role      String?
+
+  deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([dealId, contactId])
+}
+
+model Activity {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  contactId   String?   @db.Uuid
+  dealId      String?   @db.Uuid
+  type        String
+  title       String
+  description String?
+  dueAt       DateTime?
+  completedAt DateTime?
+  metadata    Json      @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id])
+  deal    Deal?    @relation(fields: [dealId], references: [id])
+
+  @@index([tenantId])
+  @@index([contactId])
+  @@index([dealId])
+}
+
+// ─────────────────────────────────────────────────────────
+// LEAD MANAGEMENT
+// ─────────────────────────────────────────────────────────
+
+model Lead {
+  id           String     @id @default(uuid()) @db.Uuid
+  tenantId     String     @db.Uuid
+  contactId    String?    @db.Uuid
+  videoCallId  String?    @unique @db.Uuid
+  status       LeadStatus @default(NEW)
+  source       LeadSource
+  score        Int        @default(0)
+  name         String?
+  email        String?
+  phone        String?
+  company      String?
+  message      String?
+  assignedToId String?    @db.Uuid
+  qualifiedAt  DateTime?
+  convertedAt  DateTime?
+  customFields Json       @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact    Contact?    @relation(fields: [contactId], references: [id])
+  videoCall  VideoCall?  @relation(fields: [videoCallId], references: [id])
+  assignedTo TenantUser? @relation("AssignedAgent", fields: [assignedToId], references: [id])
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([assignedToId])
+}
+
+// ─────────────────────────────────────────────────────────
+// VISITOR TRACKING
+// ─────────────────────────────────────────────────────────
+
+model Visitor {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  fingerprint String
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  ip          String?
+  country     String?
+  city        String?
+  userAgent   String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  email       String?
+  name        String?
+  phone       String?
+  metadata    Json     @default("{}")
+
+  tenant       Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  events       VisitorEvent[]
+  videoCalls   VideoCall[]
+  chatSessions AiChatSession[]
+
+  @@unique([tenantId, fingerprint])
+  @@index([tenantId])
+  @@index([tenantId, lastSeenAt])
+}
+
+model VisitorEvent {
+  id        String           @id @default(uuid()) @db.Uuid
+  visitorId String           @db.Uuid
+  type      VisitorEventType
+  page      String?
+  referrer  String?
+  duration  Int?
+  metadata  Json             @default("{}")
+
+  createdAt DateTime @default(now())
+
+  visitor Visitor @relation(fields: [visitorId], references: [id], onDelete: Cascade)
+
+  @@index([visitorId])
+  @@index([visitorId, type])
+  @@index([createdAt])
+}
+
+// ─────────────────────────────────────────────────────────
+// WIDGET CONFIGURATION
+// ─────────────────────────────────────────────────────────
+
+model WidgetConfig {
+  id             String         @id @default(uuid()) @db.Uuid
+  tenantId       String         @db.Uuid
+  name           String         @default("Default")
+  isActive       Boolean        @default(true)
+  position       WidgetPosition @default(BOTTOM_RIGHT)
+  primaryColor   String         @default("#6366f1")
+  secondaryColor String         @default("#8b5cf6")
+  borderRadius   Int            @default(16)
+  greeting       String         @default("Hi! How can we help you?")
+  logoUrl        String?
+  enableVideoCall Boolean       @default(true)
+  enableChat      Boolean       @default(true)
+  enableShoppable Boolean       @default(false)
+  enableFaq       Boolean       @default(false)
+  routingRules    Json          @default("{}")
+  allowedDomains  String[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+// ─────────────────────────────────────────────────────────
+// BILLING
+// ─────────────────────────────────────────────────────────
+
+model Subscription {
+  id                 String             @id @default(uuid()) @db.Uuid
+  tenantId           String             @db.Uuid
+  provider           BillingProvider
+  externalId         String             @unique
+  planId             String
+  status             SubscriptionStatus @default(TRIALING)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean            @default(false)
+  trialEnd           DateTime?
+  metadata           Json               @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalId])
+}
+
+model Invoice {
+  id         String          @id @default(uuid()) @db.Uuid
+  tenantId   String          @db.Uuid
+  provider   BillingProvider
+  externalId String          @unique
+  amount     Decimal         @db.Decimal(10, 2)
+  currency   String          @default("USD")
+  status     PaymentStatus   @default(PENDING)
+  pdfUrl     String?
+  paidAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalId])
+}
+
+model UsageRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @db.Uuid
+  metric      String
+  quantity    Decimal  @db.Decimal(16, 4)
+  periodStart DateTime
+  periodEnd   DateTime
+  reportedAt  DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, metric])
+  @@index([tenantId, periodStart, periodEnd])
+}
+
+// ─────────────────────────────────────────────────────────
+// API KEYS
+// ─────────────────────────────────────────────────────────
+
+model ApiKey {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  name        String
+  keyHash     String    @unique
+  keyPrefix   String
+  permissions String[]
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  isActive    Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([keyHash])
+}
+
+// ─────────────────────────────────────────────────────────
+// NOTIFICATIONS
+// ─────────────────────────────────────────────────────────
+
+model Notification {
+  id       String           @id @default(uuid()) @db.Uuid
+  tenantId String           @db.Uuid
+  userId   String           @db.Uuid
+  type     NotificationType
+  title    String
+  body     String?
+  link     String?
+  isRead   Boolean          @default(false)
+  readAt   DateTime?
+
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, userId])
+  @@index([tenantId, userId, isRead])
+}
+
+// ─────────────────────────────────────────────────────────
+// TAGS
+// ─────────────────────────────────────────────────────────
+
+model Tag {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @db.Uuid
+  name     String
+  color    String @default("#6366f1")
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  videos VideoTag[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model VideoTag {
+  id      String @id @default(uuid()) @db.Uuid
+  videoId String @db.Uuid
+  tagId   String @db.Uuid
+
+  video ShoppableVideo @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  tag   Tag            @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, tagId])
+}

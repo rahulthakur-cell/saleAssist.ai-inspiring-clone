@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.next/
+.turbo/
+out/
+
+# Environment
+.env
+.env.local
+.env.production
+.env.staging
+
+# Database
+packages/database/prisma/migrations/**/migration_lock.toml
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+
+# Docker volumes
+docker/data/
+
+# MinIO data
+docker/minio/data/
+
+# Misc
+*.tsbuildinfo
+#update history and create a new file for each day
+.history

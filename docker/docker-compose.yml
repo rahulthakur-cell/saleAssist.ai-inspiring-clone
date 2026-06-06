@@ -1,0 +1,155 @@
+version: "3.9"
+
+services:
+  # ═══════════════════════════════════════════════════════════
+  # PostgreSQL 16 — Primary Database
+  # ═══════════════════════════════════════════════════════════
+  postgres:
+    image: postgres:16-alpine
+    container_name: sa-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-saleassist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-saleassist_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-saleassist}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-saleassist}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # Redis 7 — Cache, Pub/Sub, BullMQ
+  # ═══════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: sa-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # MinIO — S3-compatible Object Storage
+  # ═══════════════════════════════════════════════════════════
+  minio:
+    image: minio/minio:latest
+    container_name: sa-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin_dev_password}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # Meilisearch — Full-text Search Engine
+  # ═══════════════════════════════════════════════════════════
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: sa-meilisearch
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      MEILI_ENV: development
+      MEILI_MASTER_KEY: ${MEILISEARCH_API_KEY:-masterKey_dev_change_in_production}
+      MEILI_NO_ANALYTICS: true
+    volumes:
+      - meilisearch_data:/meili_data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7700/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # LiveKit — WebRTC SFU for Video Calls & Streaming
+  # ═══════════════════════════════════════════════════════════
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: sa-livekit
+    restart: unless-stopped
+    ports:
+      - "7880:7880"   # HTTP/WebSocket
+      - "7881:7881"   # RTC (TCP)
+      - "7882:7882/udp"  # RTC (UDP)
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    command: --config /etc/livekit.yaml
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # LiteLLM — AI Gateway Proxy
+  # ═══════════════════════════════════════════════════════════
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: sa-litellm
+    restart: unless-stopped
+    ports:
+      - "4001:4000"
+    volumes:
+      - ./litellm-config.yaml:/app/config.yaml
+    command: --config /app/config.yaml --port 4000
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY:-}
+    networks:
+      - saleassist
+
+  # ═══════════════════════════════════════════════════════════
+  # RedisInsight — Redis GUI (Dev only)
+  # ═══════════════════════════════════════════════════════════
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: sa-redis-insight
+    restart: unless-stopped
+    ports:
+      - "5540:5540"
+    depends_on:
+      - redis
+    networks:
+      - saleassist
+    profiles:
+      - dev-tools
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  meilisearch_data:
+
+networks:
+  saleassist:
+    driver: bridge

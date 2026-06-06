@@ -1,0 +1,14 @@
+{
+  "extends": "@saleassist/typescript-config/nestjs.json",
+  "compilerOptions": {
+    "incremental": false,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": "./",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}
