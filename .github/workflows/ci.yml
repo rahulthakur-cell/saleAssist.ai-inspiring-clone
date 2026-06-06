@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Typecheck and build
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      APP_URL: http://localhost:3000
+      PUBLIC_APP_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      API_PORT: 4000
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+      NEXT_PUBLIC_SOCKET_URL: http://localhost:4000
+      NEXT_PUBLIC_LIVEKIT_WS_URL: ws://localhost:7880
+      DATABASE_URL: postgresql://saleassist:saleassist_dev_password@localhost:5432/saleassist?schema=public
+      REDIS_URL: redis://localhost:6379
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-jwt-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      LIVEKIT_URL: ws://localhost:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret_dev_key_change_in_production
+      RESEND_API_KEY: ""
+      EMAIL_FROM: onboarding@resend.dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Typecheck workspace
+        run: pnpm typecheck
+
+      - name: Build workspace
+        run: pnpm build
