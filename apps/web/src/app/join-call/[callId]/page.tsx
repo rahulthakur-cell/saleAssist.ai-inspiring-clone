@@ -5,10 +5,13 @@ import { useParams, useSearchParams } from 'next/navigation';
 import {
   LiveKitRoom,
   RoomAudioRenderer,
-  VideoConference,
+  useTracks,
+  ParticipantTile,
 } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import '@livekit/components-styles';
-import { PhoneCall } from 'lucide-react';
+import { PhoneCall, VideoOff } from 'lucide-react';
+import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
 
 export default function CustomerJoinCallPage() {
@@ -57,9 +60,13 @@ export default function CustomerJoinCallPage() {
           token={token}
           serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880'}
           data-lk-theme="default"
+          onError={(err) => {
+            console.error('LiveKit error:', err);
+            toast.error('Video connection error. Please check your camera and microphone permissions.');
+          }}
           className="min-h-screen"
         >
-          <VideoConference />
+          <VideoLayout name={name} />
           <RoomAudioRenderer />
         </LiveKitRoom>
       </main>
@@ -111,5 +118,48 @@ export default function CustomerJoinCallPage() {
         </button>
       </form>
     </main>
+  );
+}
+
+function VideoLayout({ name }: { name: string }) {
+  const tracks = useTracks([Track.Source.Camera]);
+  const localTracks = tracks.filter((track) => track.participant.isLocal);
+  const remoteTracks = tracks.filter((track) => !track.participant.isLocal);
+
+  const hasNoVideo = localTracks.length === 0 && remoteTracks.length === 0;
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-4">
+      {hasNoVideo ? (
+        <div className="flex flex-col items-center justify-center space-y-4 text-center">
+          <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
+            <VideoOff className="w-10 h-10 text-zinc-500" />
+          </div>
+          <div>
+            <p className="text-zinc-400 font-medium">Waiting for video...</p>
+            <p className="text-zinc-500 text-sm mt-1">Please allow camera access to see your video</p>
+          </div>
+        </div>
+      ) : (
+        <div className={`grid gap-4 w-full h-full ${remoteTracks.length > 1 ? 'grid-cols-2' : remoteTracks.length === 1 ? 'grid-cols-1 max-w-4xl' : 'grid-cols-1 max-w-2xl'}`}>
+          {localTracks.map((trackRef) => (
+            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900">
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                {name || 'You'}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+          {remoteTracks.map((trackRef) => (
+            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900">
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                {trackRef.participant.name || trackRef.participant.identity}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

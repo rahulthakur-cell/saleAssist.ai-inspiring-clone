@@ -11,7 +11,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "clean": "rimraf dist"
   },
   "dependencies": {

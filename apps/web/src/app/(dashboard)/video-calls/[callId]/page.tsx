@@ -4,14 +4,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
-  VideoConference,
   RoomAudioRenderer,
-  ControlBar,
   useTracks,
   ParticipantTile,
 } from '@livekit/components-react';
+import { Track } from 'livekit-client';
 import '@livekit/components-styles';
-import { Copy, PhoneOff, Save, User, Mail, Phone, FileText } from 'lucide-react';
+import { Copy, PhoneOff, Save, User, Mail, Phone, FileText, VideoOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
 
@@ -153,11 +152,15 @@ export default function VideoCallRoomPage() {
           serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880'}
           data-lk-theme="default"
           onDisconnected={handleRoomDisconnected}
+          onError={(err) => {
+            console.error('LiveKit error:', err);
+            toast.error('Video connection error. Please check your camera and microphone permissions.');
+          }}
           className="flex-1 flex flex-col"
         >
-          <VideoConference />
+          <VideoLayout />
           <RoomAudioRenderer />
-          
+
           {/* Custom absolute end call floating action button */}
           <div className="absolute top-4 right-4 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -278,6 +281,52 @@ export default function VideoCallRoomPage() {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function VideoLayout() {
+  const tracks = useTracks([Track.Source.Camera]);
+
+  const localTracks = tracks.filter((track) => track.participant.isLocal);
+  const remoteTracks = tracks.filter((track) => !track.participant.isLocal);
+
+  const hasNoVideo = localTracks.length === 0 && remoteTracks.length === 0;
+
+  return (
+    <div className="flex-1 flex items-center justify-center p-4">
+      {hasNoVideo ? (
+        <div className="flex flex-col items-center justify-center space-y-4 text-center">
+          <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
+            <VideoOff className="w-10 h-10 text-zinc-500" />
+          </div>
+          <div>
+            <p className="text-zinc-400 font-medium">Waiting for video...</p>
+            <p className="text-zinc-500 text-sm mt-1">Please allow camera access to see your video</p>
+          </div>
+        </div>
+      ) : (
+        <div className={`grid gap-4 w-full h-full ${remoteTracks.length > 1 ? 'grid-cols-2' : remoteTracks.length === 1 ? 'grid-cols-1 max-w-4xl' : 'grid-cols-1 max-w-2xl'}`}>
+          {/* Local video (your camera) - always shown first */}
+          {localTracks.map((trackRef) => (
+            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900">
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                You
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+          {/* Remote videos */}
+          {remoteTracks.map((trackRef) => (
+            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900">
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                {trackRef.participant.name || trackRef.participant.identity}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
