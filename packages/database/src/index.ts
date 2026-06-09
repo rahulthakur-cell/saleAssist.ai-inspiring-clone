@@ -20,3 +20,4 @@ export {
   NotificationType,
   VisitorEventType,
 } from '@prisma/client';
+export * from '@prisma/client';
