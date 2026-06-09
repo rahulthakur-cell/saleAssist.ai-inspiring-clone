@@ -117,7 +117,7 @@ export class AnalyticsService {
       formSubmits: 0,
     };
 
-    events.forEach((ev) => {
+    events.forEach((ev: { type: string; createdAt: Date }) => {
       if (ev.type === VisitorEventType.PAGE_VIEW) counts.pageViews++;
       if (ev.type === VisitorEventType.WIDGET_OPEN) counts.widgetOpens++;
       if (ev.type === VisitorEventType.CHAT_START) counts.chatStarts++;
@@ -135,7 +135,7 @@ export class AnalyticsService {
       dailyMap.set(key, { pageViews: 0, interactions: 0 });
     }
 
-    events.forEach((ev) => {
+    events.forEach((ev: { createdAt: Date }) => {
       const key = ev.createdAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       if (dailyMap.has(key)) {
         const item = dailyMap.get(key)!;

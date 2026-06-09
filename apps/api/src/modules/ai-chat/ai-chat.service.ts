@@ -95,7 +95,7 @@ export class AiChatService {
     });
 
     // Prepare full chat payload history
-    const history = session.messages.map((m) => ({
+    const history = session.messages.map((m: { role: string; content: string }) => ({
       role: m.role.toLowerCase(),
       content: m.content,
     }));

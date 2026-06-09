@@ -1,2 +1,22 @@
 export { prisma, withTenantContext, PrismaClient } from './client';
-export * from '@prisma/client';
+export {
+  UserRole,
+  TenantPlan,
+  TenantStatus,
+  InvitationStatus,
+  VideoCallStatus,
+  VideoCallType,
+  LiveStreamStatus,
+  ShoppableVideoStatus,
+  VideoFaqStatus,
+  LeadStatus,
+  LeadSource,
+  DealStage,
+  ChatMessageRole,
+  BillingProvider,
+  SubscriptionStatus,
+  PaymentStatus,
+  WidgetPosition,
+  NotificationType,
+  VisitorEventType,
+} from '@prisma/client';

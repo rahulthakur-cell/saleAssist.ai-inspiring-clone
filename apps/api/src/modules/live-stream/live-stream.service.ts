@@ -39,7 +39,7 @@ export class LiveStreamService {
         maxViewers: dto.maxViewers || null,
         metadata: {},
       },
-    }).then((stream) => {
+    }).then((stream: any) => {
       // Track event in PostHog
       this.posthogService.capture(
         tenantId,
