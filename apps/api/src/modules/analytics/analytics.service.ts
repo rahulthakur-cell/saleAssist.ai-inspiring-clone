@@ -135,7 +135,7 @@ export class AnalyticsService {
       dailyMap.set(key, { pageViews: 0, interactions: 0 });
     }
 
-    events.forEach((ev: { createdAt: Date }) => {
+    events.forEach((ev: { type: string; createdAt: Date }) => {
       const key = ev.createdAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
       if (dailyMap.has(key)) {
         const item = dailyMap.get(key)!;
