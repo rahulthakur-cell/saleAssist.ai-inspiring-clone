@@ -9,7 +9,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { Response } from 'express';
+import type { Response } from 'express';
 import { WidgetService } from './widget.service';
 import { JwtAuthGuard, RbacGuard } from '../../common/guards';
 import { RequirePermissions, TenantId, Public } from '../../common/decorators';
