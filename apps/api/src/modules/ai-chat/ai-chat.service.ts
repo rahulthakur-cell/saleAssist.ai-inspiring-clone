@@ -123,7 +123,7 @@ export class AiChatService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      const response = await fetch(`${this.litellmUrl}/chat/completions`, {
+      const response = (await fetch(`${this.litellmUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,7 +135,7 @@ export class AiChatService {
           stream: true,
         }),
         signal: controller.signal,
-      });
+      })) as Response;
 
       clearTimeout(timeoutId);
 
