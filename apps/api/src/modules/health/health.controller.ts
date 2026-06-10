@@ -19,7 +19,7 @@ export class HealthController {
   @ApiOperation({ summary: 'Health check' })
   check() {
     return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prisma),
+      () => this.prismaHealth.pingCheck('database', this.prisma as any),
     ]);
   }
 
