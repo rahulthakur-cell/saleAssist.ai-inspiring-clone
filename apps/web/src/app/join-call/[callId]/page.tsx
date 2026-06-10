@@ -25,6 +25,10 @@ export default function CustomerJoinCallPage() {
   const [roomName, setRoomName] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
+  const [liveKitUrl, setLiveKitUrl] = useState<string | null>(null);
+  const [liveKitConfigError, setLiveKitConfigError] = useState('');
+
+  const resolvedLiveKitUrl = liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880';
 
   useEffect(() => {
     const storedName = sessionStorage.getItem('saleassist-visitor-name');
@@ -32,6 +36,24 @@ export default function CustomerJoinCallPage() {
       setName(storedName);
     }
   }, []);
+
+  useEffect(() => {
+    loadLiveKitConfig();
+  }, []);
+
+  const loadLiveKitConfig = async () => {
+    try {
+      const config = await videoCallApi.getConfig();
+      if (config?.liveKitUrl) {
+        setLiveKitUrl(config.liveKitUrl);
+        setLiveKitConfigError('');
+      }
+    } catch (err: any) {
+      const message = err?.message || 'Failed to load LiveKit config';
+      setLiveKitConfigError(message);
+      console.error('[LiveKit] Guest config load failed:', message);
+    }
+  };
 
   const handleJoin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,11 +80,25 @@ export default function CustomerJoinCallPage() {
           video
           audio
           token={token}
-          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880'}
+          serverUrl={resolvedLiveKitUrl}
           data-lk-theme="default"
+          onConnected={() => {
+            console.log('[LiveKit] Guest connected to room:', roomName);
+          }}
+          onDisconnected={() => {
+            console.warn('[LiveKit] Guest disconnected from room:', roomName);
+          }}
           onError={(err) => {
-            console.error('LiveKit error:', err);
-            toast.error('Video connection error. Please check your camera and microphone permissions.');
+            console.error('[LiveKit] Guest connection error:', err);
+            const message =
+              typeof err === 'string'
+                ? err
+                : err instanceof Error
+                  ? err.message
+                  : JSON.stringify(err);
+            toast.error(
+              `Video connection failed: ${message}. Verify NEXT_PUBLIC_LIVEKIT_WS_URL is set and LiveKit is reachable.`,
+            );
           }}
           className="min-h-screen"
         >

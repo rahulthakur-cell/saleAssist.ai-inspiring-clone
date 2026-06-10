@@ -213,6 +213,7 @@ export const videoCallApi = {
   ) =>
     apiClient<any>(`/video-calls/${callId}`, { method: 'PATCH', body: data }),
   get: (callId: string) => apiClient<any>(`/video-calls/${callId}`),
+  getConfig: () => apiClient<{ liveKitUrl: string }>('/video-calls/livekit-config'),
   list: (limit = 20, page = 1) => apiClient<any>(`/video-calls?limit=${limit}&page=${page}`),
   getQueue: () => apiClient<{ waitingCount: number }>('/video-calls/queue'),
 };

@@ -22,25 +22,47 @@ export default function VideoCallRoomPage() {
   const [token, setToken] = useState<string | null>(null);
   const [roomName, setRoomName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const isEndingCallRef = useRef(false);
-
-  // CRM sidebar state
+  const [liveKitUrl, setLiveKitUrl] = useState<string | null>(null);
+  const [liveKitConfigError, setLiveKitConfigError] = useState('');
+  const [inviteUrl, setInviteUrl] = useState('');
   const [visitorName, setVisitorName] = useState('');
   const [visitorEmail, setVisitorEmail] = useState('');
   const [visitorPhone, setVisitorPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
-  const [inviteUrl, setInviteUrl] = useState('');
+  const isEndingCallRef = useRef(false);
+
+  const resolvedLiveKitUrl = liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880';
 
   useEffect(() => {
     if (callId) {
-      joinCallRoom();
+      loadLiveKitConfig();
     }
   }, [callId]);
 
+  useEffect(() => {
+    if (callId && resolvedLiveKitUrl && !token) {
+      joinCallRoom();
+    }
+  }, [callId, resolvedLiveKitUrl, token]);
+
+  const loadLiveKitConfig = async () => {
+    try {
+      const config = await videoCallApi.getConfig();
+      if (config?.liveKitUrl) {
+        setLiveKitUrl(config.liveKitUrl);
+        setLiveKitConfigError('');
+      }
+    } catch (err: any) {
+      const message = err?.message || 'Failed to load LiveKit config';
+      setLiveKitConfigError(message);
+      console.error('[LiveKit] Config load failed:', message);
+    }
+  };
+
   const joinCallRoom = async () => {
     try {
-      // Retrieve name from local storage or set default
+      setLoading(true);
       const profileStr = localStorage.getItem('user');
       let agentName = 'Agent';
       if (profileStr) {
@@ -54,7 +76,6 @@ export default function VideoCallRoomPage() {
       setToken(res.token);
       setRoomName(res.roomName);
 
-      // Fetch call details to populate CRM sidebar
       const callDetails = await videoCallApi.get(callId);
       if (callDetails) {
         setVisitorName(callDetails.visitorName || '');
@@ -149,12 +170,23 @@ export default function VideoCallRoomPage() {
           video={true}
           audio={true}
           token={token}
-          serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880'}
+          serverUrl={resolvedLiveKitUrl}
           data-lk-theme="default"
+          onConnected={() => {
+            console.log('[LiveKit] Connected to room:', roomName);
+          }}
           onDisconnected={handleRoomDisconnected}
           onError={(err) => {
-            console.error('LiveKit error:', err);
-            toast.error('Video connection error. Please check your camera and microphone permissions.');
+            console.error('[LiveKit] Connection error:', err);
+            const message =
+              typeof err === 'string'
+                ? err
+                : err instanceof Error
+                  ? err.message
+                  : JSON.stringify(err);
+            toast.error(
+              `Video connection failed: ${message}. Verify NEXT_PUBLIC_LIVEKIT_WS_URL is set and LiveKit is reachable.`,
+            );
           }}
           className="flex-1 flex flex-col"
         >

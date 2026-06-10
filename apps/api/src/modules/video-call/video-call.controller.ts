@@ -91,6 +91,13 @@ export class VideoCallController {
     return this.videoCallService.getQueueStatus(tenantId);
   }
 
+  @Get('livekit-config')
+  @Public()
+  @ApiOperation({ summary: 'Get LiveKit server URL for the frontend' })
+  async getLiveKitConfig(): Promise<{ liveKitUrl: string }> {
+    return this.videoCallService.getLiveKitConfig();
+  }
+
   @Get(':id')
   @RequirePermissions('video_call:view')
   @ApiOperation({ summary: 'Get details of a specific video call' })

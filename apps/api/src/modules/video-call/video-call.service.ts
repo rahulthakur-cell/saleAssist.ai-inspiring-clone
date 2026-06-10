@@ -20,6 +20,11 @@ export class VideoCallService {
     private readonly configService: ConfigService,
   ) {}
 
+  getLiveKitConfig(): { liveKitUrl: string } {
+    const liveKitUrl = this.configService.get<string>('LIVEKIT_URL', 'http://localhost:7880');
+    return { liveKitUrl };
+  }
+
   /**
    * Initiates a new video call request.
    */
