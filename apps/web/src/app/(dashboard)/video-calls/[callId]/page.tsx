@@ -7,12 +7,78 @@ import {
   RoomAudioRenderer,
   useTracks,
   ParticipantTile,
+  useMaybeRoomContext,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
-import { Copy, PhoneOff, Save, User, Mail, Phone, FileText, VideoOff } from 'lucide-react';
+import { Copy, PhoneOff, Save, User, Mail, Phone, FileText, VideoOff, Mic, MicOff, Video, VideoOff as VideoIconOff, Monitor, Maximize, Minimize } from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
+
+function CallControlsInner() {
+  const room = useMaybeRoomContext();
+  const [micOn, setMicOn] = useState(true);
+  const [cameraOn, setCameraOn] = useState(true);
+  const [sharing, setSharing] = useState(false);
+
+  const toggleMic = async () => {
+    if (!room) return;
+    const participant = room.localParticipant as any;
+    await participant.setMicrophoneEnabled(!micOn);
+    setMicOn((prev) => !prev);
+  };
+
+  const toggleCamera = async () => {
+    if (!room) return;
+    const participant = room.localParticipant as any;
+    await participant.setCameraEnabled(!cameraOn);
+    setCameraOn((prev) => !prev);
+  };
+
+  const toggleScreenShare = async () => {
+    if (!room) return;
+    const participant = room.localParticipant as any;
+    try {
+      if (sharing) {
+        await participant.stopScreenShare();
+        setSharing(false);
+        toast.info('Screen share stopped');
+      } else {
+        await participant.publishScreen();
+        setSharing(true);
+        toast.success('Screen sharing started');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle screen share');
+    }
+  };
+
+  return (
+    <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-black/70 backdrop-blur-md border border-border/50 px-4 py-2.5 rounded-full">
+      <button
+        onClick={toggleMic}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
+      >
+        {micOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 text-rose-500" />}
+        {micOn ? 'Mute' : 'Unmute'}
+      </button>
+      <button
+        onClick={toggleCamera}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
+      >
+        {cameraOn ? <Video className="w-4 h-4" /> : <VideoIconOff className="w-4 h-4 text-rose-500" />}
+        {cameraOn ? 'Stop Video' : 'Start Video'}
+      </button>
+      <button
+        onClick={toggleScreenShare}
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
+      >
+        <Monitor className="w-4 h-4" />
+        {sharing ? 'Stop Share' : 'Share Screen'}
+      </button>
+    </div>
+  );
+}
 
 export default function VideoCallRoomPage() {
   const params = useParams();
@@ -30,7 +96,10 @@ export default function VideoCallRoomPage() {
   const [visitorPhone, setVisitorPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const isEndingCallRef = useRef(false);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
 
   const resolvedLiveKitUrl = liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880';
 
@@ -75,6 +144,7 @@ export default function VideoCallRoomPage() {
       const res = await videoCallApi.join(callId, agentName);
       setToken(res.token);
       setRoomName(res.roomName);
+      setIsHost(Boolean(localStorage.getItem('user')));
 
       const callDetails = await videoCallApi.get(callId);
       if (callDetails) {
@@ -121,6 +191,28 @@ export default function VideoCallRoomPage() {
     toast.warning('Media connection dropped. The call was not ended.');
   };
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    const el = videoContainerRef.current;
+    if (!el) return;
+    try {
+      if (!document.fullscreenElement) {
+        await el.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle fullscreen');
+    }
+  };
+
   const handleSaveNotes = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingNotes(true);
@@ -165,7 +257,7 @@ export default function VideoCallRoomPage() {
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)] overflow-hidden">
       {/* LiveKit Video Feed */}
-      <div className="flex-1 flex flex-col rounded-2xl border border-border bg-zinc-950 overflow-hidden relative group">
+      <div ref={videoContainerRef} className="flex-1 flex flex-col rounded-2xl border border-border bg-zinc-950 overflow-hidden relative group">
         <LiveKitRoom
           video={true}
           audio={true}
@@ -192,9 +284,20 @@ export default function VideoCallRoomPage() {
         >
           <VideoLayout />
           <RoomAudioRenderer />
+          <div style={{ display: isHost ? 'flex' : 'none' }}>
+            <CallControlsInner />
+          </div>
 
-          {/* Custom absolute end call floating action button */}
-          <div className="absolute top-4 right-4 z-40 opacity-0 group-hover:opacity-100 transition-opacity">
+          {/* Top-right controls */}
+          <div className="absolute top-4 right-4 z-40 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={toggleFullscreen}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black/70 backdrop-blur-sm border border-border/50 text-white text-xs font-semibold hover:bg-black/80 transition-all"
+              aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+              {isFullscreen ? 'Exit' : 'Fullscreen'}
+            </button>
             <button
               onClick={handleEndCall}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-lg shadow-red-500/25 transition-all"

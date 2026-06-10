@@ -123,19 +123,27 @@ export class AiChatService {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
 
-      const response = (await fetch(`${this.litellmUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.litellmKey}`,
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages,
-          stream: true,
-        }),
-        signal: controller.signal,
-      })) as Response;
+    const cleanMessages = messages.map((m: { role: string; content: string | any[] }) => {
+      if (Array.isArray(m.content)) {
+        const textParts = m.content.filter((p: any) => p.type === 'text');
+        return { ...m, content: textParts.map((p: any) => p.text || '').join('\n') };
+      }
+      return { ...m, content: (m.content as string) || '' };
+    });
+
+    const response = (await fetch(`${this.litellmUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.litellmKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: cleanMessages,
+        stream: true,
+      }),
+      signal: controller.signal,
+    })) as Response;
 
       clearTimeout(timeoutId);
 
