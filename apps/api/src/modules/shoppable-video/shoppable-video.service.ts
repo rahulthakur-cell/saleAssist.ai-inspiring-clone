@@ -3,7 +3,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 import { CreateVideoDto, UpdateVideoDto, CreateHotspotDto } from './dto/create-video.dto';
 import { ShoppableVideoStatus } from '@saleassist/database';
 import { InjectQueue } from '@nestjs/bull';
-import { Queue } from 'bull';
+import type { Queue } from 'bull';
 import { SearchService } from '../search/search.service';
 
 @Injectable()
