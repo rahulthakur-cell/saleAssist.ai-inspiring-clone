@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   LiveKitRoom,
@@ -94,7 +94,7 @@ function CallControlsInner({
   );
 }
 
-export default function CustomerJoinCallPage() {
+function CustomerJoinCallInner() {
   const params = useParams();
   const searchParams = useSearchParams();
   const callId = params.callId as string;
@@ -322,6 +322,18 @@ export default function CustomerJoinCallPage() {
         </button>
       </form>
     </main>
+  );
+}
+
+export default function CustomerJoinCallPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-violet-500/20 border-t-violet-500 animate-spin" />
+      </div>
+    }>
+      <CustomerJoinCallInner />
+    </Suspense>
   );
 }
 
