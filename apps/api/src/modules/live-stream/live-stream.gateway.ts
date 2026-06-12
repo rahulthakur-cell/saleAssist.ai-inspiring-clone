@@ -7,7 +7,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
+import type { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { LiveStreamService } from './live-stream.service';
 import { RedisService } from '../../common/redis/redis.service';
