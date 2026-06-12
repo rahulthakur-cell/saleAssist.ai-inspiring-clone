@@ -498,7 +498,7 @@ export class VideoCallService {
     }
 
     try {
-      const response = await fetch('https://api.resend.com/emails', {
+      const response: any = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${apiKey}`,

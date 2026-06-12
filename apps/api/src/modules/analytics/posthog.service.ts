@@ -34,7 +34,7 @@ export class PosthogService {
         },
       };
 
-      const response = await fetch(url, {
+      const response: any = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
