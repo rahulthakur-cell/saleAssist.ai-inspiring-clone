@@ -185,7 +185,7 @@ export class AiChatService {
         stream: true,
       }),
       signal: controller.signal,
-    }) as any;
+    })) as any;
 
       clearTimeout(timeoutId);
 
