@@ -2,7 +2,7 @@
 # https://docs.litellm.ai/docs/proxy/configs
 
 model_list:
-  # OpenAI Models
+  # OpenAI Models (vision-capable default first)
   - model_name: gpt-4o
     litellm_params:
       model: openai/gpt-4o
@@ -25,10 +25,10 @@ model_list:
       model: gemini/gemini-2.0-flash
       api_key: os.environ/GOOGLE_AI_API_KEY
 
-  # Fallback model (cheapest)
+  # Fallback model
   - model_name: default
     litellm_params:
-      model: openai/gpt-4o-mini
+      model: openai/gpt-4o
       api_key: os.environ/OPENAI_API_KEY
 
 litellm_settings:

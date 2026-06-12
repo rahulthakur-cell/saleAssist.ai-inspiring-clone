@@ -15,6 +15,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { VideoCallService } from './video-call.service';
+import { VideoCallGateway } from './video-call.gateway';
 import { CreateCallDto, JoinCallDto } from './dto/create-call.dto';
 import { JwtAuthGuard, RbacGuard } from '../../common/guards';
 import { CurrentUser, Public, TenantId, RequirePermissions } from '../../common/decorators';
@@ -28,6 +29,7 @@ export class VideoCallController {
     private readonly videoCallService: VideoCallService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly videoCallGateway: VideoCallGateway,
   ) {}
 
   @Post()
@@ -96,6 +98,50 @@ export class VideoCallController {
   @ApiOperation({ summary: 'Get LiveKit server URL for the frontend' })
   async getLiveKitConfig(): Promise<{ liveKitUrl: string }> {
     return this.videoCallService.getLiveKitConfig();
+  }
+
+  @Get(':id/chat')
+  @Public()
+  @ApiOperation({ summary: 'Get video call chat history' })
+  async getChat(@Param('id') callId: string, @TenantId() tenantId: string): Promise<any> {
+    return this.videoCallService.getChatHistory(callId, tenantId);
+  }
+
+  @Post(':id/chat')
+  @Public()
+  @ApiOperation({ summary: 'Send a video call chat message' })
+  async sendChat(
+    @Param('id') callId: string,
+    @TenantId() tenantId: string,
+    @Body() dto: { message: string; senderName: string; senderId?: string },
+  ): Promise<any> {
+    console.log('[sendChat] hit', { callId, tenantId, dto });
+    try {
+      const result = await this.videoCallService.sendChatMessage(callId, tenantId, dto);
+      // Broadcast the message to the socket room
+      this.videoCallGateway.server.to(`call:${callId}`).emit('call:chat:message', {
+        id: result.id,
+        callId: result.videoCallId,
+        message: result.message,
+        senderId: result.senderId || dto.senderId,
+        senderName: result.senderName,
+        createdAt: result.createdAt.toISOString(),
+      });
+      return result;
+    } catch (err) {
+      console.log('[sendChat] error', err instanceof Error ? err.message : err);
+      throw err;
+    }
+  }
+
+  @Post(':id/recordings/upload')
+  @ApiOperation({ summary: 'Upload a video call recording' })
+  async uploadRecording(
+    @Param('id') callId: string,
+    @TenantId() tenantId: string,
+    @Body() dto: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string; file?: string },
+  ): Promise<any> {
+    return this.videoCallService.attachRecording(callId, tenantId, dto);
   }
 
   @Get(':id')

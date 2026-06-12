@@ -285,7 +285,19 @@ export default function LiveStreamRoomPage() {
             token={token}
             serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880'}
             data-lk-theme="default"
-            onDisconnected={() => router.push('/live-streams')}
+            onDisconnected={() => {
+              console.log('[LiveKit] Disconnected from stream room');
+              router.push('/live-streams');
+            }}
+            onError={(err) => {
+              const message = typeof err === 'string' ? err : err instanceof Error ? err.message : JSON.stringify(err);
+              if (message.includes('Client initiated disconnect')) {
+                console.debug('[LiveKit] Client initiated disconnect');
+                return;
+              }
+              console.error('[LiveKit] Stream connection error:', err);
+              toast.error(`Stream connection failed: ${message}`);
+            }}
             className="flex-1 flex flex-col justify-center"
           >
             {isHost ? (

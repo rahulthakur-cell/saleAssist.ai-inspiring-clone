@@ -94,14 +94,42 @@ export class AiChatService {
       },
     });
 
-    // Prepare full chat payload history
-    const history = session.messages.map((m: { role: string; content: string }) => ({
-      role: m.role.toLowerCase(),
-      content: m.content,
-    }));
+    // Prepare full chat payload history - preserve image_url content
+    const history = session.messages.map((m: { role: string; content: string | any[] }) => {
+      if (Array.isArray(m.content)) {
+        const parts = (m.content as any[]).map((p: any) => {
+          if (p.type === 'text') return { type: 'text', text: p.text || '' };
+          if (p.type === 'image_url') {
+            const src = typeof p.image_url === 'string' ? p.image_url : p.image_url?.url;
+            if (!src) return null;
+            const normalized = String(src).trim();
+            if (!/^(https?:|data:)/i.test(normalized)) return null;
+            if (!/\.(png|jpe?g|webp|gif|bmp|avif)(\?.*)?$/i.test(normalized) && !normalized.startsWith('data:')) return null;
+            return { type: 'image_url', image_url: normalized };
+          }
+          return null;
+        }).filter(Boolean);
+        return { role: m.role.toLowerCase(), content: parts };
+      }
+      return { role: m.role.toLowerCase(), content: m.content as string };
+    });
     
-    // Add new user prompt
-    history.push({ role: 'user', content: userMessage });
+    // Add new user prompt - preserve image_url if present
+    const userContent: any = Array.isArray(userMessage)
+      ? userMessage.map((p: any) => {
+          if (p.type === 'image_url') {
+            const src = typeof p.image_url === 'string' ? p.image_url : p.image_url?.url;
+            if (!src) return null;
+            const normalized = String(src).trim();
+            if (!/^(https?:|data:)/i.test(normalized)) return null;
+            if (!/\.(png|jpe?g|webp|gif|bmp|avif)(\?.*)?$/i.test(normalized) && !normalized.startsWith('data:')) return null;
+            return { type: 'image_url', image_url: normalized };
+          }
+          return { type: 'text', text: p.text || '' };
+        }).filter((p: any) => (p as any).text || (p as any).image_url)
+      : userMessage;
+
+    history.push({ role: 'user', content: userContent });
 
     // Prepend system prompt
     if (session.systemPrompt) {
@@ -111,12 +139,12 @@ export class AiChatService {
     const subject = new Subject<any>();
 
     // Call LLM asynchronously so NestJS SSE controller can capture it
-    this.executeLlmStream(sessionId, history, subject);
+    this.executeLlmStream(session.model, sessionId, history, subject);
 
     return subject.asObservable();
   }
 
-  private async executeLlmStream(sessionId: string, messages: any[], subject: Subject<any>) {
+  private async executeLlmStream(sessionModel: string, sessionId: string, messages: any[], subject: Subject<any>) {
     let responseText = '';
     
     try {
@@ -125,11 +153,25 @@ export class AiChatService {
 
     const cleanMessages = messages.map((m: { role: string; content: string | any[] }) => {
       if (Array.isArray(m.content)) {
-        const textParts = m.content.filter((p: any) => p.type === 'text');
-        return { ...m, content: textParts.map((p: any) => p.text || '').join('\n') };
+        const parts = m.content.map((p: any) => {
+          if (p.type === 'text') return { type: 'text', text: p.text || '' };
+          if (p.type === 'image_url') {
+            const src = typeof p.image_url === 'string' ? p.image_url : p.image_url?.url;
+            if (!src || !src.startsWith('data:') && !src.startsWith('http')) return null;
+            if (src.includes('.png') || src.includes('.jpg') || src.includes('.jpeg') || src.includes('.webp')) {
+              return { type: 'image_url', image_url: src };
+            }
+            return null;
+          }
+          return null;
+        }).filter(Boolean);
+        return { ...m, content: parts };
       }
       return { ...m, content: (m.content as string) || '' };
     });
+
+    const hasImages = cleanMessages.some((m: any) => Array.isArray(m.content) && m.content.some((p: any) => p.type === 'image_url'));
+    const selectedModel = hasImages ? 'gpt-4o' : (sessionModel === 'gpt-4o-mini' ? 'gpt-4o' : (sessionModel || 'gpt-4o'));
 
     const response = (await fetch(`${this.litellmUrl}/chat/completions`, {
       method: 'POST',
@@ -138,12 +180,12 @@ export class AiChatService {
         'Authorization': `Bearer ${this.litellmKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: selectedModel,
         messages: cleanMessages,
         stream: true,
       }),
       signal: controller.signal,
-    })) as Response;
+    }) as any;
 
       clearTimeout(timeoutId);
 

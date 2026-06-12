@@ -46,7 +46,7 @@ export class LivekitService {
     token.addGrant({
       roomJoin: true,
       room: roomName,
-      roomCreate: options.isHost,
+      roomCreate: true, // Allow guests/viewers to initialize the empty room so they can wait
       canPublish: options.canPublish,
       canSubscribe: options.canSubscribe,
       canPublishData: true,

@@ -25,12 +25,6 @@ class ApiError extends Error {
   }
 }
 
-interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn?: number;
-}
-
 function unwrapApiResponse<T>(result: unknown): T {
   if (
     result &&
@@ -40,19 +34,17 @@ function unwrapApiResponse<T>(result: unknown): T {
   ) {
     return (result as ApiResponse<T>).data;
   }
-
   return result as T;
 }
 
 function clearStoredAuth() {
   if (typeof window === 'undefined') return;
-
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
   localStorage.removeItem('tenantId');
 }
 
-async function refreshAccessToken(): Promise<AuthTokens | null> {
+async function refreshAccessToken(): Promise<{ accessToken: string; refreshToken: string } | null> {
   if (typeof window === 'undefined') return null;
 
   const refreshToken = localStorage.getItem('refreshToken');
@@ -69,7 +61,7 @@ async function refreshAccessToken(): Promise<AuthTokens | null> {
     return null;
   }
 
-  const result = unwrapApiResponse<AuthTokens>(await response.json());
+  const result = unwrapApiResponse<{ accessToken: string; refreshToken: string }>(await response.json());
   if (!result?.accessToken || !result.refreshToken) {
     clearStoredAuth();
     return null;
@@ -80,35 +72,32 @@ async function refreshAccessToken(): Promise<AuthTokens | null> {
   return result;
 }
 
-async function apiClient<T = unknown>(
-  endpoint: string,
-  options: ApiOptions = {},
-): Promise<T> {
+async function apiClient<T = unknown>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body, headers = {}, token, skipAuthRefresh = false } = options;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
+  const storedToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null);
 
   const requestHeaders: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...headers,
   };
 
-  // Add auth token
-  const storedToken = token || (typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null);
+  if (!(body instanceof FormData)) {
+    requestHeaders['Content-Type'] = 'application/json';
+  }
+
   if (storedToken) {
     requestHeaders['Authorization'] = `Bearer ${storedToken}`;
   }
 
-  // Add tenant ID
   const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
   if (tenantId) {
     requestHeaders['X-Tenant-ID'] = tenantId;
   }
 
-  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE}${endpoint}`;
-
   const response = await fetch(url, {
     method,
     headers: requestHeaders,
-    body: body ? JSON.stringify(body) : undefined,
+    body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined,
   });
 
   if (response.status === 401 && !skipAuthRefresh && typeof window !== 'undefined') {
@@ -123,47 +112,45 @@ async function apiClient<T = unknown>(
   }
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new ApiError(
-      response.status,
-      errorBody.message || `API Error: ${response.statusText}`,
-      errorBody.errors,
-    );
+    let message = `API Error: ${response.statusText}`;
+    try {
+      const errorBody = await response.json();
+      message = errorBody?.message || message;
+    } catch {
+      const text = await response.text().catch(() => '');
+      if (text) message = text;
+    }
+    throw new ApiError(response.status, message);
   }
 
-  return unwrapApiResponse<T>(await response.json());
-}
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    return unwrapApiResponse<T>(await response.json());
+  }
 
-// ─── Auth API ─────────────────────────────────────────
+  return response as unknown as Promise<T>;
+}
 
 export const authApi = {
   register: (data: { email: string; password: string; name: string; tenantName: string }) =>
     apiClient('/auth/register', { method: 'POST', body: data }),
-
   login: (data: { email: string; password: string; tenantSlug?: string }) =>
     apiClient<{
       user: any;
       tokens: { accessToken: string; refreshToken: string; expiresIn: number };
     }>('/auth/login', { method: 'POST', body: data }),
-
   refresh: (refreshToken: string) =>
-    apiClient<AuthTokens>('/auth/refresh', { method: 'POST', body: { refreshToken }, skipAuthRefresh: true }),
-
+    apiClient<{ accessToken: string; refreshToken: string }>('/auth/refresh', { method: 'POST', body: { refreshToken }, skipAuthRefresh: true }),
   logout: (refreshToken: string) =>
     apiClient('/auth/logout', { method: 'POST', body: { refreshToken } }),
-
   me: () => apiClient('/auth/me'),
 };
-
-// ─── Tenant API ───────────────────────────────────────
 
 export const tenantApi = {
   getCurrent: () => apiClient('/tenants/current'),
   update: (data: any) => apiClient('/tenants/current', { method: 'PATCH', body: data }),
   getUsage: () => apiClient('/tenants/current/usage'),
 };
-
-// ─── Team API ─────────────────────────────────────────
 
 export const teamApi = {
   listMembers: () => apiClient('/team/members'),
@@ -174,21 +161,14 @@ export const teamApi = {
     apiClient(`/team/members/${id}/role`, { method: 'PATCH', body: data }),
 };
 
-// ─── User API ─────────────────────────────────────────
-
 export const userApi = {
   getProfile: () => apiClient('/users/profile'),
   updateProfile: (data: any) => apiClient('/users/profile', { method: 'PATCH', body: data }),
   getTenants: () => apiClient('/users/tenants'),
 };
 
-// ─── Video Call API ───────────────────────────────────
-
 export const videoCallApi = {
-  create: (
-    data: { type?: string; visitorName?: string; visitorEmail?: string; visitorPhone?: string },
-    tenantId?: string,
-  ) =>
+  create: (data: { type?: string; visitorName?: string; visitorEmail?: string; visitorPhone?: string }, tenantId?: string) =>
     apiClient<any>('/video-calls', {
       method: 'POST',
       body: data,
@@ -202,23 +182,19 @@ export const videoCallApi = {
     }),
   end: (callId: string) =>
     apiClient(`/video-calls/${callId}/end`, { method: 'POST' }),
-  update: (
-    callId: string,
-    data: {
-      visitorName?: string;
-      visitorEmail?: string;
-      visitorPhone?: string;
-      metadata?: Record<string, unknown>;
-    },
-  ) =>
-    apiClient<any>(`/video-calls/${callId}`, { method: 'PATCH', body: data }),
   get: (callId: string) => apiClient<any>(`/video-calls/${callId}`),
+  update: (callId: string, data: { visitorName?: string; visitorEmail?: string; visitorPhone?: string; metadata?: Record<string, unknown> }) =>
+    apiClient<any>(`/video-calls/${callId}`, { method: 'PATCH', body: data }),
   getConfig: () => apiClient<{ liveKitUrl: string }>('/video-calls/livekit-config'),
   list: (limit = 20, page = 1) => apiClient<any>(`/video-calls?limit=${limit}&page=${page}`),
   getQueue: () => apiClient<{ waitingCount: number }>('/video-calls/queue'),
+  getChatHistory: (callId: string) =>
+    apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string }>>(`/video-calls/${callId}/chat`),
+  sendChatMessage: (callId: string, data: { message: string; senderName?: string }) =>
+    apiClient<{ id: string; senderName: string; message: string; createdAt: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
+  uploadRecording: (callId: string, data: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string; file?: string }) =>
+    apiClient<{ url: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data }),
 };
-
-// ─── Live Stream API ───────────────────────────────────
 
 export const liveStreamApi = {
   create: (data: { title: string; description?: string; scheduledAt?: string; isShoppable?: boolean }) =>
@@ -242,8 +218,6 @@ export const liveStreamApi = {
   list: (limit = 20, page = 1) => apiClient<any>(`/live-streams?limit=${limit}&page=${page}`),
 };
 
-// ─── Storage API ───────────────────────────────────────
-
 export const storageApi = {
   getPresignedUrl: (fileName: string, contentType: string) =>
     apiClient<{ uploadUrl: string; publicUrl: string; objectName: string }>('/storage/presigned-url', {
@@ -251,8 +225,6 @@ export const storageApi = {
       body: { fileName, contentType },
     }),
 };
-
-// ─── Shoppable Video API ───────────────────────────────
 
 export const shoppableVideoApi = {
   create: (data: { title: string; description?: string; videoUrl: string; displayType?: string }) =>
@@ -262,38 +234,22 @@ export const shoppableVideoApi = {
   get: (id: string) => apiClient<any>(`/shoppable-videos/${id}`),
   list: (limit = 20, page = 1) => apiClient<any>(`/shoppable-videos?limit=${limit}&page=${page}`),
   delete: (id: string) => apiClient<any>(`/shoppable-videos/${id}`, { method: 'DELETE' }),
-  addHotspot: (
-    id: string,
-    data: {
-      productName: string;
-      productUrl: string;
-      productImage?: string;
-      price?: number;
-      startTime: number;
-      endTime: number;
-      posX?: number;
-      posY?: number;
-    },
-  ) =>
+  addHotspot: (id: string, data: { productName: string; productUrl: string; productImage?: string; price?: number; startTime: number; endTime: number; posX?: number; posY?: number }) =>
     apiClient<any>(`/shoppable-videos/${id}/hotspots`, { method: 'POST', body: data }),
   deleteHotspot: (id: string, hotspotId: string) =>
     apiClient<any>(`/shoppable-videos/${id}/hotspots/${hotspotId}`, { method: 'DELETE' }),
 };
-
-// ─── Video FAQ API ─────────────────────────────────────
 
 export const videoFaqApi = {
   create: (data: { title: string; description?: string }) =>
     apiClient<any>('/video-faqs', { method: 'POST', body: data }),
   addItem: (faqId: string, data: { question: string; videoUrl: string }) =>
     apiClient<any>(`/video-faqs/${faqId}/items`, { method: 'POST', body: data }),
-  list: () => apiClient<any>('/video-faqs'),
+  list: () => apiClient<any[]>('/video-faqs'),
   delete: (id: string) => apiClient<any>(`/video-faqs/${id}`, { method: 'DELETE' }),
   deleteItem: (faqId: string, itemId: string) =>
     apiClient<any>(`/video-faqs/${faqId}/items/${itemId}`, { method: 'DELETE' }),
 };
-
-// ─── AI Chat API ───────────────────────────────────────
 
 export const aiChatApi = {
   createSession: (data?: { title?: string }) =>
@@ -302,16 +258,12 @@ export const aiChatApi = {
   getSession: (id: string) => apiClient<any>(`/ai-chat/sessions/${id}`),
 };
 
-// ─── Widget API ────────────────────────────────────────
-
 export const widgetApi = {
   getConfig: (tenantId?: string) =>
     apiClient<any>(`/widget/config${tenantId ? `?tenantId=${tenantId}` : ''}`),
   updateConfig: (data: any) =>
     apiClient<any>('/widget/config', { method: 'PATCH', body: data }),
 };
-
-// ─── Analytics API ─────────────────────────────────────
 
 export const analyticsApi = {
   trackEvent: (data: {
@@ -324,16 +276,11 @@ export const analyticsApi = {
     tenantId?: string;
     visitorInfo?: any;
   }) =>
-    apiClient<any>('/analytics/events', {
-      method: 'POST',
-      body: data,
-    }),
+    apiClient<any>('/analytics/events', { method: 'POST', body: data }),
   getOverview: () => apiClient<any>('/analytics/overview'),
   getVisitors: (limit?: number) =>
     apiClient<any>(`/analytics/visitors${limit ? `?limit=${limit}` : ''}`),
 };
-
-// ─── Billing API ───────────────────────────────────────
 
 export const billingApi = {
   getSubscription: () => apiClient<any>('/billing/subscription'),
@@ -342,13 +289,11 @@ export const billingApi = {
   getInvoices: () => apiClient<any[]>('/billing/invoices'),
 };
 
-// ─── Search API ────────────────────────────────────────
-
 export const searchApi = {
   query: (q: string) =>
     apiClient<any[]>(`/search?q=${encodeURIComponent(q)}`),
   reindex: () =>
-    apiClient<any>('/search/reindex', { method: 'POST' }),
+    apiClient('/search/reindex', { method: 'POST' }),
 };
 
 export { apiClient, ApiError };

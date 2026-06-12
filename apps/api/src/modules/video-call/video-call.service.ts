@@ -7,10 +7,13 @@ import { CreateCallDto } from './dto/create-call.dto';
 import { VideoCallStatus, VideoCallType, LeadSource, LeadStatus, Prisma } from '@saleassist/database';
 import { nanoid } from 'nanoid';
 import { PosthogService } from '../analytics/posthog.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class VideoCallService {
   private readonly logger = new Logger(VideoCallService.name);
+  private readonly uploadDir = path.join(process.cwd(), 'uploads', 'recordings');
 
   constructor(
     private readonly prisma: PrismaService,
@@ -18,7 +21,62 @@ export class VideoCallService {
     private readonly livekitService: LivekitService,
     private readonly posthogService: PosthogService,
     private readonly configService: ConfigService,
-  ) {}
+  ) {
+    if (!fs.existsSync(this.uploadDir)) fs.mkdirSync(this.uploadDir, { recursive: true });
+  }
+
+  async getChatHistory(callId: string, tenantId: string) {
+    await this.prisma.setTenantContext(tenantId);
+    const messages = await this.prisma.videoCallChatMessage.findMany({
+      where: { videoCallId: callId },
+      orderBy: { createdAt: 'asc' },
+    });
+    return messages;
+  }
+
+  async sendChatMessage(callId: string, tenantId: string, data: { message: string; senderName: string; senderId?: string }) {
+    await this.prisma.setTenantContext(tenantId);
+    this.logger.debug(`sendChatMessage start callId=${callId} tenantId=${tenantId} payload=${JSON.stringify({ message: data.message, senderName: data.senderName, senderId: data.senderId })}`);
+    let message;
+    try {
+      message = await this.prisma.videoCallChatMessage.create({
+        data: {
+          videoCallId: callId,
+          senderId: data.senderId,
+          senderName: data.senderName,
+          message: data.message,
+        },
+      });
+    } catch (err) {
+      this.logger.error(`sendChatMessage prisma error callId=${callId} err=${err instanceof Error ? err.message : JSON.stringify(err)}`);
+      throw err;
+    }
+    this.logger.debug(`sendChatMessage success callId=${callId} id=${message.id}`);
+    return message;
+  }
+
+  async attachRecording(callId: string, tenantId: string, data: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string }) {
+    await this.prisma.setTenantContext(tenantId);
+    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+    if (!call) throw new NotFoundException('Video call not found');
+
+    const recording = await this.prisma.videoCallRecording.create({
+      data: {
+        videoCallId: callId,
+        url: data.url,
+        sizeBytes: data.sizeBytes,
+        durationSec: data.durationSec,
+        mimeType: data.mimeType,
+      },
+    });
+
+    await this.prisma.videoCall.update({
+      where: { id: callId },
+      data: { recordingUrl: data.url },
+    });
+
+    return recording;
+  }
 
   getLiveKitConfig(): { liveKitUrl: string } {
     const liveKitUrl = this.configService.get<string>('LIVEKIT_URL', 'http://localhost:7880');

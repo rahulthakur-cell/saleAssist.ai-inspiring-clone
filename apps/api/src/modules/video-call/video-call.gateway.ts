@@ -244,10 +244,41 @@ export class VideoCallGateway implements OnGatewayConnection, OnGatewayDisconnec
     const { tenantId, tenantUserId } = client.data;
     if (!tenantId || !tenantUserId) return;
 
-    // Notify other agents that this call was rejected/missed so they can pick it up
     this.server.to(`agents:${tenantId}`).emit('call:rejected-by-agent', {
       callId: data.callId,
       agentId: tenantUserId,
     });
+  }
+
+  @SubscribeMessage('call:join')
+  async handleCallJoin(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { callId: string },
+  ) {
+    if (!data?.callId) return { event: 'error', data: 'callId required' };
+    await client.join(`call:${data.callId}`);
+    this.logger.log(`Client ${client.id} joined call room: ${data.callId}`);
+    return { event: 'joined', data: { callId: data.callId } };
+  }
+
+  @SubscribeMessage('call:chat:send')
+  async handleChatSend(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { callId: string; message: string; senderId?: string; senderName?: string },
+  ) {
+    const { tenantId, userId, tenantUserId } = client.data;
+    if (!tenantId || !data.callId || !data.message?.trim()) return;
+
+    const payload = {
+      callId: data.callId,
+      message: data.message.trim(),
+      senderId: data.senderId || userId || tenantUserId || client.id,
+      senderName: data.senderName || 'Guest',
+      createdAt: new Date().toISOString(),
+    };
+
+    await client.join(`call:${data.callId}`);
+    this.server.to(`call:${data.callId}`).emit('call:chat:message', payload);
+    return { event: 'call:chat:message', data: payload };
   }
 }

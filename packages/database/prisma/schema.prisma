@@ -366,6 +366,8 @@ model VideoCall {
   visitor      Visitor?              @relation(fields: [visitorId], references: [id])
   participants VideoCallParticipant[]
   lead         Lead?
+  recordings  VideoCallRecording[]
+  chatMessages VideoCallChatMessage[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -387,6 +389,36 @@ model VideoCallParticipant {
   @@index([videoCallId])
 }
 
+model VideoCallRecording {
+  id           String   @id @default(uuid()) @db.Uuid
+  videoCallId  String   @db.Uuid
+  url          String
+  sizeBytes    Int?
+  durationSec  Int?
+  mimeType     String?
+  createdAt    DateTime @default(now())
+
+  videoCall VideoCall @relation(fields: [videoCallId], references: [id], onDelete: Cascade)
+
+  @@index([videoCallId])
+}
+
+model VideoCallChatMessage {
+  id           String   @id @default(uuid()) @db.Uuid
+  videoCallId  String   @db.Uuid
+  senderId     String?
+  senderName   String
+  message      String
+  createdAt    DateTime @default(now())
+
+  videoCall VideoCall @relation(fields: [videoCallId], references: [id], onDelete: Cascade)
+
+  @@index([videoCallId])
+  @@index([videoCallId, createdAt])
+}
+
+// ─────────────────────────────────────────────────────────
+// LIVE STREAMING
 // ─────────────────────────────────────────────────────────
 // LIVE STREAMING
 // ─────────────────────────────────────────────────────────
