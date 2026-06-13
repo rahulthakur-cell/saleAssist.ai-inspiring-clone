@@ -6,6 +6,9 @@ import * as bcrypt from 'bcrypt';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  public static migrationLog: string = 'Not run';
+  public static migrationError: string = '';
+
   constructor() {
     super({
       log:
@@ -37,6 +40,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       process.env.NODE_ENV === 'production' ||
       process.env.RUN_AUTO_MIGRATION === 'true'
     ) {
+      PrismaService.migrationLog = 'Migration started';
       try {
         const path = require('path');
         const fs = require('fs');
@@ -60,7 +64,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           throw new Error(`Could not find schema.prisma at any of the candidates: ${candidates.join(', ')}`);
         }
 
-        this.logger.log(`🔄 Running database schema push programmatically using schema: ${schemaPath}`);
+        const msg = `Running database schema push programmatically using schema: ${schemaPath}`;
+        this.logger.log(msg);
+        PrismaService.migrationLog += `\n${msg}`;
         const { execSync } = require('child_process');
         
         // Push the schema using prisma CLI
@@ -69,19 +75,33 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           { stdio: 'pipe', encoding: 'utf-8' }
         );
         this.logger.log(`✅ Database schema push completed:\n${pushOutput}`);
+        PrismaService.migrationLog += `\n✅ Database schema push completed:\n${pushOutput}`;
       } catch (err: any) {
-        this.logger.error('❌ Failed to push database schema:', err.message);
-        if (err.stdout) this.logger.error(`Stdout: ${err.stdout}`);
-        if (err.stderr) this.logger.error(`Stderr: ${err.stderr}`);
+        const errMsg = `❌ Failed to push database schema: ${err.message}`;
+        this.logger.error(errMsg);
+        PrismaService.migrationError = errMsg;
+        if (err.stdout) {
+          this.logger.error(`Stdout: ${err.stdout}`);
+          PrismaService.migrationError += `\nStdout: ${err.stdout}`;
+        }
+        if (err.stderr) {
+          this.logger.error(`Stderr: ${err.stderr}`);
+          PrismaService.migrationError += `\nStderr: ${err.stderr}`;
+        }
       }
 
       try {
         this.logger.log('🌱 Running database seeding programmatically...');
+        PrismaService.migrationLog += '\n🌱 Running database seeding programmatically...';
         await this.seedDatabase();
         this.logger.log('✅ Database seeding completed successfully.');
+        PrismaService.migrationLog += '\n✅ Database seeding completed successfully.';
       } catch (err: any) {
         this.logger.error('❌ Failed to seed database:', err.message);
+        PrismaService.migrationError += `\n❌ Failed to seed database: ${err.message}`;
       }
+    } else {
+      PrismaService.migrationLog = 'Migration not needed';
     }
   }
 

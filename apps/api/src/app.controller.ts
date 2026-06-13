@@ -62,7 +62,9 @@ export class AppController {
     }
 
     return {
-      build: 'v2-self-healing-migrations',
+      build: 'v3-detailed-migration-logs',
+      migrationLog: PrismaService.migrationLog,
+      migrationError: PrismaService.migrationError,
       db: {
         connected: dbConnected,
         error: dbError,
