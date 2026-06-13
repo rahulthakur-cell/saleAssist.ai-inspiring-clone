@@ -2,8 +2,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@saleassist/shared', '@saleassist/ui'],
-  output: 'standalone',
+  transpilePackages: ['@saleassist/shared'],
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost' },

@@ -27,7 +27,9 @@ async function bootstrap() {
   });
 
   // ─── API Prefix ─────────────────────────────────────────
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['/'],
+  });
 
   // ─── Validation ─────────────────────────────────────────
   app.useGlobalPipes(

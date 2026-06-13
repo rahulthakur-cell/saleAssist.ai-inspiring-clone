@@ -21,6 +21,7 @@ import { SearchModule } from './modules/search/search.module';
 import { TenantResolverMiddleware } from './common/middleware/tenant-resolver.middleware';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { RedisModule } from './common/redis/redis.module';
     BillingModule,
     SearchModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
