@@ -17,7 +17,7 @@ export class AppController {
       status: 'success',
       message: 'SaleAssist.ai API server is running',
       timestamp: new Date().toISOString(),
-      version: '1.0.0',
+      version: '1.0.1',
     };
   }
 
@@ -62,6 +62,7 @@ export class AppController {
     }
 
     return {
+      build: 'v2-self-healing-migrations',
       db: {
         connected: dbConnected,
         error: dbError,
