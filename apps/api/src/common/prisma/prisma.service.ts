@@ -69,9 +69,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         PrismaService.migrationLog += `\n${msg}`;
         const { execSync } = require('child_process');
         
-        // Push the schema using prisma CLI
+        // Push the schema using prisma CLI (force version 6 to match @prisma/client dependency)
         const pushOutput = execSync(
-          `npx prisma db push --schema="${schemaPath}" --accept-data-loss`,
+          `npx prisma@6 db push --schema="${schemaPath}" --accept-data-loss`,
           { stdio: 'pipe', encoding: 'utf-8' }
         );
         this.logger.log(`✅ Database schema push completed:\n${pushOutput}`);
