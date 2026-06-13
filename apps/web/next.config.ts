@@ -11,8 +11,14 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    // Only proxy API calls in local development when API_URL is set.
-    // On Vercel the frontend talks to the API directly via NEXT_PUBLIC_API_URL.
+    // SECURITY/CRASH FIX: Never use rewrites in production (Vercel)
+    // On Vercel, frontend talks to backend directly via NEXT_PUBLIC_API_URL.
+    // If a user accidentally pastes API_URL=http://localhost:4000 into Vercel env vars,
+    // it will crash the serverless function. This prevents that.
+    if (process.env.NODE_ENV === 'production') {
+      return [];
+    }
+
     const apiUrl = process.env.API_URL;
     if (!apiUrl) return [];
 
