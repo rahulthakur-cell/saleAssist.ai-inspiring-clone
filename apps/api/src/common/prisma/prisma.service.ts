@@ -20,14 +20,52 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
-    if (process.env.NODE_ENV === 'production' || process.env.RUN_AUTO_MIGRATION === 'true') {
+    await this.$connect();
+    this.logger.log('✅ Database connected');
+
+    // Check if the database has been initialized (e.g. check if the User table exists)
+    let needsMigration = false;
+    try {
+      await this.$queryRawUnsafe('SELECT 1 FROM "User" LIMIT 1');
+    } catch (err: any) {
+      this.logger.warn('⚠️ User table check failed (database might be uninitialized): ' + err.message);
+      needsMigration = true;
+    }
+
+    if (
+      needsMigration ||
+      process.env.NODE_ENV === 'production' ||
+      process.env.RUN_AUTO_MIGRATION === 'true'
+    ) {
       try {
-        this.logger.log('🔄 Running database schema push programmatically...');
+        const path = require('path');
+        const fs = require('fs');
+        
+        // Find the schema path dynamically
+        const candidates = [
+          path.resolve(process.cwd(), 'packages/database/prisma/schema.prisma'),
+          path.resolve(__dirname, '../../../../packages/database/prisma/schema.prisma'),
+          path.resolve(__dirname, '../../..', 'packages/database/prisma/schema.prisma'),
+        ];
+        
+        let schemaPath = null;
+        for (const candidate of candidates) {
+          if (fs.existsSync(candidate)) {
+            schemaPath = candidate;
+            break;
+          }
+        }
+
+        if (!schemaPath) {
+          throw new Error(`Could not find schema.prisma at any of the candidates: ${candidates.join(', ')}`);
+        }
+
+        this.logger.log(`🔄 Running database schema push programmatically using schema: ${schemaPath}`);
         const { execSync } = require('child_process');
         
         // Push the schema using prisma CLI
         const pushOutput = execSync(
-          'npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss',
+          `npx prisma db push --schema="${schemaPath}" --accept-data-loss`,
           { stdio: 'pipe', encoding: 'utf-8' }
         );
         this.logger.log(`✅ Database schema push completed:\n${pushOutput}`);
@@ -45,9 +83,6 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         this.logger.error('❌ Failed to seed database:', err.message);
       }
     }
-
-    await this.$connect();
-    this.logger.log('✅ Database connected');
   }
 
   async onModuleDestroy() {
