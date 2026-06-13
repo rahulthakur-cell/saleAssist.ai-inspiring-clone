@@ -19,8 +19,25 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // ─── CORS ───────────────────────────────────────────────
+  const allowedOrigins = [
+    process.env.APP_URL,
+    process.env.PUBLIC_APP_URL,
+    'http://localhost:3000',
+    'https://sale-assist-ai-inspiring-clone-web.vercel.app',
+  ].filter(Boolean) as string[];
+
   app.enableCors({
-    origin: process.env.APP_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (e.g. curl, mobile apps, server-to-server)
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.some((allowed) => origin === allowed) ||
+        origin.endsWith('.vercel.app')
+      ) {
+        return callback(null, true);
+      }
+      callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Tenant-ID', 'X-API-Key'],
