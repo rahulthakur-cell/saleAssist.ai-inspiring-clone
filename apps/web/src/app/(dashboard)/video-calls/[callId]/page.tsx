@@ -235,6 +235,7 @@ export default function VideoCallRoomPage() {
   const isEndingCallRef = useRef(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const chatSocketRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
 
   const resolvedLiveKitUrl = normalizeLiveKitUrl(
@@ -376,10 +377,45 @@ export default function VideoCallRoomPage() {
     if (!isRecording) {
       try {
         const result = await videoCallApi.startRecording(callId);
-        if (result?.recordingId) {
-          setRecordingId(result.recordingId);
+        if (result?.fallbackToScreen) {
+          console.log('[Controls] Falling back to screen recording');
+          toast('Server recording unavailable, using screen recording');
+          const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+          const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+            ? 'video/webm;codecs=vp9'
+            : 'video/webm';
+          const recorder = new MediaRecorder(stream, { mimeType: mime });
+          const chunks: Blob[] = [];
+          recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+          };
+          recorder.onstop = async () => {
+            const blob = new Blob(chunks, { type: mime });
+            const sizeBytes = blob.size;
+            const durationSec = recordingSeconds;
+            const objectUrl = URL.createObjectURL(blob);
+            try {
+              const saved = await videoCallApi.uploadRecording(callId, {
+                url: objectUrl,
+                sizeBytes,
+                durationSec,
+                mimeType: mime,
+              });
+              toast.success('Recording saved');
+            } catch {
+              toast.error('Failed to save recording');
+            }
+            stream.getTracks().forEach((t) => t.stop());
+            URL.revokeObjectURL(objectUrl);
+          };
+          recorder.start(1000);
+          mediaRecorderRef.current = recorder;
           setIsRecording(true);
           toast.success('Recording started');
+        } else if (result?.recordingId) {
+          setRecordingId(result.recordingId);
+          setIsRecording(true);
+          toast.success('Room recording started');
         }
       } catch (err: any) {
         toast.error(err?.message || 'Failed to start recording');
@@ -389,6 +425,7 @@ export default function VideoCallRoomPage() {
         if (recordingId) {
           await videoCallApi.stopRecording(callId, recordingId);
         }
+        mediaRecorderRef.current?.stop();
         setIsRecording(false);
         setRecordingId(null);
         toast.info('Recording stopped');

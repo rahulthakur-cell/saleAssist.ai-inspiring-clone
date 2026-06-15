@@ -78,65 +78,81 @@ export class VideoCallService {
     return recording;
   }
 
-  async startRoomRecording(callId: string, tenantId: string): Promise<{ recordingId: string }> {
-    await this.prisma.setTenantContext(tenantId);
-    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
-    if (!call) throw new NotFoundException('Video call not found');
-    if (!call.roomName) throw new NotFoundException('Room name not found for this call');
+  async startRoomRecording(callId: string, tenantId: string): Promise<{ recordingId: string; fallbackToScreen?: boolean }> {
+    try {
+      await this.prisma.setTenantContext(tenantId);
+      const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+      if (!call) throw new NotFoundException('Video call not found');
+      if (!call.roomName) throw new NotFoundException('Room name not found for this call');
 
-    const result = await this.livekitService.startRoomRecording(call.roomName);
-    
-    const existingMetadata: Prisma.JsonObject =
-      call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
-        ? (call.metadata as Prisma.JsonObject)
-        : {};
-    
-    const metadata: Prisma.InputJsonObject = {
-      ...existingMetadata,
-      egressId: result.egressId,
-      recordingStatus: 'in_progress',
-    };
+      const result = await this.livekitService.startRoomRecording(call.roomName);
+      
+      if (!result.success) {
+        this.logger.warn(`Room recording unavailable, falling back: ${result.error}`);
+        return { recordingId: '', fallbackToScreen: true };
+      }
+      
+      const existingMetadata: Prisma.JsonObject =
+        call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
+          ? (call.metadata as Prisma.JsonObject)
+          : {};
+      
+      const metadata: Prisma.InputJsonObject = {
+        ...existingMetadata,
+        egressId: result.egressId,
+        recordingStatus: 'in_progress',
+      };
 
-    await this.prisma.videoCall.update({
-      where: { id: callId },
-      data: { metadata },
-    });
+      await this.prisma.videoCall.update({
+        where: { id: callId },
+        data: { metadata },
+      });
 
-    const recording = await this.prisma.videoCallRecording.create({
-      data: {
-        videoCallId: callId,
-        url: `recording:${result.egressId}`,
-      },
-    });
+      const recording = await this.prisma.videoCallRecording.create({
+        data: {
+          videoCallId: callId,
+          url: `recording:${result.egressId}`,
+        },
+      });
 
-    return { recordingId: recording.id };
+      return { recordingId: recording.id };
+    } catch (err: any) {
+      this.logger.error(`startRoomRecording failed: ${err.message}`);
+      // Return fallback without throwing to prevent 500 error
+      return { recordingId: '', fallbackToScreen: true };
+    }
   }
 
   async stopRoomRecording(callId: string, tenantId: string, recordingId?: string): Promise<void> {
-    await this.prisma.setTenantContext(tenantId);
-    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
-    if (!call) throw new NotFoundException('Video call not found');
+    try {
+      await this.prisma.setTenantContext(tenantId);
+      const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+      if (!call) return; // Silently return if call not found
 
-    const existingMetadata: Prisma.JsonObject =
-      call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
-        ? (call.metadata as Prisma.JsonObject)
-        : {};
-    
-    const egressId = existingMetadata.egressId as string | undefined;
-    
-    const metadata: Prisma.InputJsonObject = {
-      ...existingMetadata,
-      recordingStatus: 'stopped',
-    };
+      const existingMetadata: Prisma.JsonObject =
+        call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
+          ? (call.metadata as Prisma.JsonObject)
+          : {};
+      
+      const egressId = existingMetadata.egressId as string | undefined;
+      
+      const metadata: Prisma.InputJsonObject = {
+        ...existingMetadata,
+        recordingStatus: 'stopped',
+      };
 
-    if (egressId) {
-      await this.livekitService.stopRoomRecording(egressId);
+      if (egressId) {
+        await this.livekitService.stopRoomRecording(egressId);
+      }
+      
+      await this.prisma.videoCall.update({
+        where: { id: callId },
+        data: { metadata },
+      });
+    } catch (err: any) {
+      this.logger.error(`stopRoomRecording failed: ${err.message}`);
+      throw err;
     }
-    
-    await this.prisma.videoCall.update({
-      where: { id: callId },
-      data: { metadata },
-    });
   }
 
   getLiveKitConfig(): { liveKitUrl: string } {

@@ -2,6 +2,12 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AccessToken, RoomServiceClient, EgressClient } from 'livekit-server-sdk';
 
+export interface RoomRecordingResult {
+  egressId: string;
+  success: boolean;
+  error?: string;
+}
+
 @Injectable()
 export class LivekitService {
   private readonly logger = new Logger(LivekitService.name);
@@ -9,16 +15,17 @@ export class LivekitService {
   private readonly apiSecret: string;
   private readonly livekitUrl: string;
   private roomService!: RoomServiceClient;
-  private egressService!: EgressClient;
+  private egressService!: EgressClient | null;
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('LIVEKIT_API_KEY', 'devkey');
-    this.apiSecret = this.configService.get<string>(
-      'LIVEKIT_API_SECRET',
+    this.apiSecret = this.configService.get<string>
+      ('LIVEKIT_API_SECRET',
       'secret_dev_key_change_in_production',
     );
     this.livekitUrl = this.configService.get<string>('LIVEKIT_URL', 'http://localhost:7880');
 
+    this.egressService = null;
     try {
       this.roomService = new RoomServiceClient(
         this.getRoomServiceUrl(this.livekitUrl),
@@ -30,8 +37,10 @@ export class LivekitService {
         this.apiKey,
         this.apiSecret,
       );
+      this.logger.log('LiveKit services initialized successfully');
     } catch (error: any) {
       this.logger.error(`Failed to initialize LiveKit services: ${error.message}`);
+      // Don't throw - allow the app to continue without recording
     }
   }
 
@@ -83,9 +92,9 @@ export class LivekitService {
   /**
    * Start room egress recording (records all participants' video and audio).
    */
-  async startRoomRecording(roomName: string): Promise<{ egressId: string }> {
+  async startRoomRecording(roomName: string): Promise<RoomRecordingResult> {
     if (!this.egressService) {
-      throw new Error('Egress service not initialized');
+      return { egressId: '', success: false, error: 'Egress service not configured on server' };
     }
 
     try {
@@ -98,10 +107,10 @@ export class LivekitService {
         output,
       );
       this.logger.log(`Recording started for room ${roomName}, egressId: ${egress.egressId}`);
-      return { egressId: egress.egressId };
+      return { egressId: egress.egressId, success: true };
     } catch (error: any) {
       this.logger.error(`Failed to start recording for room ${roomName}: ${error.message}`);
-      throw new Error(`Failed to start recording: ${error.message}`);
+      return { egressId: '', success: false, error: error.message };
     }
   }
 
@@ -110,7 +119,8 @@ export class LivekitService {
    */
   async stopRoomRecording(egressId: string): Promise<void> {
     if (!this.egressService) {
-      throw new Error('Egress service not initialized');
+      this.logger.warn('Egress service not available, cannot stop recording');
+      return;
     }
 
     try {

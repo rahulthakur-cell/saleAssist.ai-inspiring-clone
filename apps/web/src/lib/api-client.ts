@@ -194,9 +194,9 @@ export const videoCallApi = {
     apiClient<{ id: string; senderName: string; message: string; createdAt: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
 uploadRecording: (callId: string, data: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string; file?: string }) =>
      apiClient<{ url: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data }),
-  startRecording: (callId: string) =>
-     apiClient<{ recordingId: string }>(`/video-calls/${callId}/recordings/start`, { method: 'POST' }),
-  stopRecording: (callId: string, recordingId?: string) =>
+   startRecording: (callId: string) =>
+     apiClient<{ recordingId: string; fallbackToScreen?: boolean }>(`/video-calls/${callId}/recordings/start`, { method: 'POST' }),
+   stopRecording: (callId: string, recordingId?: string) =>
      apiClient(`/video-calls/${callId}/recordings/stop`, { method: 'POST', body: { recordingId } }),
 };
 
