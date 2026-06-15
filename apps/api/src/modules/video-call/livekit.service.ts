@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, EgressClient } from 'livekit-server-sdk';
 
 @Injectable()
 export class LivekitService {
@@ -9,6 +9,7 @@ export class LivekitService {
   private readonly apiSecret: string;
   private readonly livekitUrl: string;
   private roomService!: RoomServiceClient;
+  private egressService!: EgressClient;
 
   constructor(private configService: ConfigService) {
     this.apiKey = this.configService.get<string>('LIVEKIT_API_KEY', 'devkey');
@@ -24,8 +25,13 @@ export class LivekitService {
         this.apiKey,
         this.apiSecret,
       );
+      this.egressService = new EgressClient(
+        this.getRoomServiceUrl(this.livekitUrl),
+        this.apiKey,
+        this.apiSecret,
+      );
     } catch (error: any) {
-      this.logger.error(`Failed to initialize LiveKit RoomServiceClient: ${error.message}`);
+      this.logger.error(`Failed to initialize LiveKit services: ${error.message}`);
     }
   }
 
@@ -72,5 +78,63 @@ export class LivekitService {
     if (url.startsWith('wss://')) return url.replace(/^wss:\/\//, 'https://');
     if (url.startsWith('ws://')) return url.replace(/^ws:\/\//, 'http://');
     return url;
+  }
+
+  /**
+   * Start room egress recording (records all participants' video and audio).
+   */
+  async startRoomRecording(roomName: string): Promise<{ egressId: string }> {
+    if (!this.egressService) {
+      throw new Error('Egress service not initialized');
+    }
+
+    try {
+      const output = {
+        filepath: `recordings/${roomName}-${Date.now()}.mp4`,
+      } as any;
+
+      const egress = await this.egressService.startRoomCompositeEgress(
+        roomName,
+        output,
+      );
+      this.logger.log(`Recording started for room ${roomName}, egressId: ${egress.egressId}`);
+      return { egressId: egress.egressId };
+    } catch (error: any) {
+      this.logger.error(`Failed to start recording for room ${roomName}: ${error.message}`);
+      throw new Error(`Failed to start recording: ${error.message}`);
+    }
+  }
+
+  /**
+   * Stop room egress recording.
+   */
+  async stopRoomRecording(egressId: string): Promise<void> {
+    if (!this.egressService) {
+      throw new Error('Egress service not initialized');
+    }
+
+    try {
+      await this.egressService.stopEgress(egressId);
+      this.logger.log(`Recording stopped, egressId: ${egressId}`);
+    } catch (error: any) {
+      this.logger.error(`Failed to stop recording ${egressId}: ${error.message}`);
+      throw new Error(`Failed to stop recording: ${error.message}`);
+    }
+  }
+
+  /**
+   * List active recordings for a room.
+   */
+  async listRecordings(roomName: string): Promise<any[]> {
+    if (!this.egressService) {
+      throw new Error('Egress service not initialized');
+    }
+
+    try {
+      return await this.egressService.listEgress({ roomName, active: true });
+    } catch (error: any) {
+      this.logger.error(`Failed to list recordings for room ${roomName}: ${error.message}`);
+      return [];
+    }
   }
 }

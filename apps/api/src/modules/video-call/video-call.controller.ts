@@ -144,6 +144,24 @@ export class VideoCallController {
     return this.videoCallService.attachRecording(callId, tenantId, dto);
   }
 
+  @Post(':id/recordings/start')
+  @RequirePermissions('video_call:join')
+  @ApiOperation({ summary: 'Start recording the video call room' })
+  async startRecording(@Param('id') callId: string, @TenantId() tenantId: string): Promise<any> {
+    return this.videoCallService.startRoomRecording(callId, tenantId);
+  }
+
+  @Post(':id/recordings/stop')
+  @RequirePermissions('video_call:join')
+  @ApiOperation({ summary: 'Stop recording the video call room' })
+  async stopRecording(
+    @Param('id') callId: string,
+    @TenantId() tenantId: string,
+    @Body() dto: { recordingId?: string },
+  ): Promise<any> {
+    return this.videoCallService.stopRoomRecording(callId, tenantId, dto.recordingId);
+  }
+
   @Get(':id')
   @RequirePermissions('video_call:view')
   @ApiOperation({ summary: 'Get details of a specific video call' })

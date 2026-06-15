@@ -12,16 +12,49 @@ import {
 } from '@livekit/components-react';
 import { Track, Room as LkRoom } from 'livekit-client';
 import '@livekit/components-styles';
-import { Copy, PhoneOff, Save, User, Mail, Phone, FileText, VideoOff, Mic, MicOff, Video, Maximize, Minimize, MessageSquare, Send, X, LayoutGrid, Link2 } from 'lucide-react';
+import {
+  Copy,
+  PhoneOff,
+  Save,
+  User,
+  Mail,
+  Phone,
+  FileText,
+  VideoOff,
+  Mic,
+  MicOff,
+  Video,
+  Maximize,
+  Minimize,
+  MessageSquare,
+  Send,
+  X,
+  LayoutGrid,
+  Link2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
 
+function normalizeLiveKitUrl(url: string) {
+  if (url.startsWith('http://')) return url.replace(/^http:\/\//, 'ws://');
+  if (url.startsWith('https://')) return url.replace(/^https:\/\//, 'wss://');
+  return url;
+}
+
 function useLocalTracks() {
-  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare, Track.Source.Microphone]);
-  const localAudio = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Microphone);
+  const tracks = useTracks([
+    Track.Source.Camera,
+    Track.Source.ScreenShare,
+    Track.Source.Microphone,
+  ]);
+  const localAudio = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.Microphone,
+  );
   const localVideo = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.Camera);
-  const localScreen = tracks.find((t) => t.participant.isLocal && t.source === Track.Source.ScreenShare);
+  const localScreen = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare,
+  );
 
   const getTrackEnabled = (ref: any) => {
     if (!ref) return false;
@@ -58,15 +91,14 @@ function CallControlsInner({
   onShareCallLink,
   inviteUrl,
 }: CallControlsInnerProps) {
-  const {
-    localParticipant,
-    isMicrophoneEnabled,
-    isCameraEnabled,
-    isScreenShareEnabled,
-  } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
 
   const toggleMic = async () => {
-    console.log('[Controls] toggleMic clicked', { isMicrophoneEnabled, hasParticipant: Boolean(localParticipant) });
+    console.log('[Controls] toggleMic clicked', {
+      isMicrophoneEnabled,
+      hasParticipant: Boolean(localParticipant),
+    });
     if (!localParticipant) return;
     try {
       await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
@@ -76,7 +108,10 @@ function CallControlsInner({
   };
 
   const toggleCamera = async () => {
-    console.log('[Controls] toggleCamera clicked', { isCameraEnabled, hasParticipant: Boolean(localParticipant) });
+    console.log('[Controls] toggleCamera clicked', {
+      isCameraEnabled,
+      hasParticipant: Boolean(localParticipant),
+    });
     if (!localParticipant) return;
     try {
       await localParticipant.setCameraEnabled(!isCameraEnabled);
@@ -86,7 +121,10 @@ function CallControlsInner({
   };
 
   const toggleScreenShare = async () => {
-    console.log('[Controls] toggleScreenShare clicked', { isScreenShareEnabled, hasParticipant: Boolean(localParticipant) });
+    console.log('[Controls] toggleScreenShare clicked', {
+      isScreenShareEnabled,
+      hasParticipant: Boolean(localParticipant),
+    });
     if (!localParticipant) return;
     try {
       await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
@@ -107,14 +145,22 @@ function CallControlsInner({
           onClick={toggleMic}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
         >
-          {isMicrophoneEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4 text-rose-500" />}
+          {isMicrophoneEnabled ? (
+            <Mic className="w-4 h-4" />
+          ) : (
+            <MicOff className="w-4 h-4 text-rose-500" />
+          )}
           {isMicrophoneEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
         </button>
         <button
           onClick={toggleCamera}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
         >
-          {isCameraEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4 text-rose-500" />}
+          {isCameraEnabled ? (
+            <Video className="w-4 h-4" />
+          ) : (
+            <VideoOff className="w-4 h-4 text-rose-500" />
+          )}
           {isCameraEnabled ? 'Stop Camera' : 'Start Camera'}
         </button>
         <button
@@ -130,16 +176,29 @@ function CallControlsInner({
         >
           {isRecording ? 'Stop Rec' : 'Record'}
         </button>
-        {isRecording && <span className="text-xs font-mono text-white/90">{formatTime(recordingSeconds)}</span>}
-        <button onClick={onToggleChat} className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold">
+        {isRecording && (
+          <span className="text-xs font-mono text-white/90">{formatTime(recordingSeconds)}</span>
+        )}
+        <button
+          onClick={onToggleChat}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
+        >
           <MessageSquare className="w-4 h-4" /> Chat
         </button>
       </div>
       {inviteUrl && (
         <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-black/70 backdrop-blur-md border border-border/50 px-3 py-2 rounded-full">
           <Link2 className="w-4 h-4 text-white/80" />
-          <input readOnly value={inviteUrl} className="bg-transparent text-white text-xs w-72 outline-none" />
-          <button type="button" onClick={onShareCallLink} className="text-white text-xs font-semibold hover:text-white/80">
+          <input
+            readOnly
+            value={inviteUrl}
+            className="bg-transparent text-white text-xs w-72 outline-none"
+          />
+          <button
+            type="button"
+            onClick={onShareCallLink}
+            className="text-white text-xs font-semibold hover:text-white/80"
+          >
             Copy
           </button>
         </div>
@@ -165,18 +224,22 @@ export default function VideoCallRoomPage() {
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [messages, setMessages] = useState<Array<{ id: string; senderName: string; text: string; createdAt: string }>>([]);
+  const [messages, setMessages] = useState<
+    Array<{ id: string; senderName: string; text: string; createdAt: string }>
+  >([]);
   const [chatInput, setChatInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [recordingId, setRecordingId] = useState<string | null>(null);
   const [showChat, setShowChat] = useState(false);
   const isEndingCallRef = useRef(false);
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const chatSocketRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingTimerRef = useRef<number | null>(null);
 
-  const resolvedLiveKitUrl = liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880';
+  const resolvedLiveKitUrl = normalizeLiveKitUrl(
+    liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880',
+  );
 
   useEffect(() => {
     if (callId) {
@@ -213,7 +276,7 @@ export default function VideoCallRoomPage() {
         try {
           const profile = JSON.parse(profileStr);
           agentName = profile.name || 'Agent';
-        } catch { }
+        } catch {}
       }
 
       const res = await videoCallApi.join(callId, agentName);
@@ -312,44 +375,28 @@ export default function VideoCallRoomPage() {
     console.log('[Controls] handleRecordingToggle clicked', { isRecording });
     if (!isRecording) {
       try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
-        const recorder = new MediaRecorder(stream, { mimeType: mime });
-        const chunks: Blob[] = [];
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-        recorder.onstop = async () => {
-          const blob = new Blob(chunks, { type: mime });
-          const sizeBytes = blob.size;
-          const durationSec = recordingSeconds;
-          const objectUrl = URL.createObjectURL(blob);
-          try {
-            const saved = await videoCallApi.uploadRecording(callId, {
-              url: objectUrl,
-              sizeBytes,
-              durationSec,
-              mimeType: mime,
-            });
-            toast.success('Recording saved');
-          } catch {
-            toast.error('Failed to save recording');
-          }
-          stream.getTracks().forEach((t) => t.stop());
-          URL.revokeObjectURL(objectUrl);
-        };
-        recorder.start(1000);
-        mediaRecorderRef.current = recorder;
-        setIsRecording(true);
-        toast.success('Recording started');
+        const result = await videoCallApi.startRecording(callId);
+        if (result?.recordingId) {
+          setRecordingId(result.recordingId);
+          setIsRecording(true);
+          toast.success('Recording started');
+        }
       } catch (err: any) {
         toast.error(err?.message || 'Failed to start recording');
       }
     } else {
-      console.log('[Controls] stopRecording');
-      mediaRecorderRef.current?.stop();
-      setIsRecording(false);
-      toast.info('Recording stopped');
-      if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
-      setRecordingSeconds(0);
+      try {
+        if (recordingId) {
+          await videoCallApi.stopRecording(callId, recordingId);
+        }
+        setIsRecording(false);
+        setRecordingId(null);
+        toast.info('Recording stopped');
+        if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+        setRecordingSeconds(0);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to stop recording');
+      }
     }
   };
 
@@ -360,7 +407,9 @@ export default function VideoCallRoomPage() {
   useEffect(() => {
     let interval: number | undefined;
     if (isRecording) interval = window.setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
-    return () => { if (interval) window.clearInterval(interval); };
+    return () => {
+      if (interval) window.clearInterval(interval);
+    };
   }, [isRecording]);
 
   const formatTime = (seconds: number) => {
@@ -368,8 +417,6 @@ export default function VideoCallRoomPage() {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
-
-
 
   const handleChatToggle = () => {
     console.log('[Controls] handleChatToggle clicked', { next: !showChat });
@@ -381,13 +428,23 @@ export default function VideoCallRoomPage() {
       return;
     }
     try {
-      const socket = getSocket('/video', { tenantId: localStorage.getItem('tenantId') || undefined });
+      const socket = getSocket('/video', {
+        tenantId: localStorage.getItem('tenantId') || undefined,
+      });
       chatSocketRef.current = socket;
       socket.on('connect', () => socket.emit('call:join', { callId }));
       socket.on('call:chat:message', (payload: any) => {
         setMessages((prev) => {
           if (prev.some((m) => m.id === payload.id)) return prev;
-          return [...prev, { id: payload.id, senderName: payload.senderName, text: payload.message || payload.text, createdAt: payload.createdAt }];
+          return [
+            ...prev,
+            {
+              id: payload.id,
+              senderName: payload.senderName,
+              text: payload.message || payload.text,
+              createdAt: payload.createdAt,
+            },
+          ];
         });
       });
       socket.connect();
@@ -407,12 +464,20 @@ export default function VideoCallRoomPage() {
         try {
           const profile = JSON.parse(profileStr);
           senderName = profile.name || 'Agent';
-        } catch { }
+        } catch {}
       }
       const saved = await videoCallApi.sendChatMessage(callId, { message: text, senderName });
       setMessages((prev) => {
         if (prev.some((m) => m.id === saved.id)) return prev;
-        return [...prev, { id: saved.id, senderName: saved.senderName, text: saved.message, createdAt: saved.createdAt }];
+        return [
+          ...prev,
+          {
+            id: saved.id,
+            senderName: saved.senderName,
+            text: saved.message,
+            createdAt: saved.createdAt,
+          },
+        ];
       });
       setChatInput('');
     } catch (err: any) {
@@ -432,7 +497,9 @@ export default function VideoCallRoomPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <div className="w-12 h-12 rounded-full border-4 border-violet-500/20 border-t-violet-500 animate-spin" />
-        <p className="text-muted-foreground text-sm font-medium">Connecting to WebRTC media server...</p>
+        <p className="text-muted-foreground text-sm font-medium">
+          Connecting to WebRTC media server...
+        </p>
       </div>
     );
   }
@@ -441,14 +508,22 @@ export default function VideoCallRoomPage() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 text-center">
         <p className="text-rose-500 font-semibold">Could not establish media session.</p>
-        <button onClick={() => router.push('/video-calls')} className="px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg text-sm text-foreground font-semibold">Return to Dashboard</button>
+        <button
+          onClick={() => router.push('/video-calls')}
+          className="px-4 py-2 bg-muted hover:bg-muted/80 rounded-lg text-sm text-foreground font-semibold"
+        >
+          Return to Dashboard
+        </button>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 h-[calc(100vh-140px)] overflow-hidden">
-      <div ref={videoContainerRef} className="flex-1 flex flex-col rounded-2xl border border-border bg-zinc-950 overflow-hidden relative group">
+      <div
+        ref={videoContainerRef}
+        className="flex-1 flex flex-col rounded-2xl border border-border bg-zinc-950 overflow-hidden relative group"
+      >
         <LiveKitRoom
           video={true}
           audio={true}
@@ -513,20 +588,44 @@ export default function VideoCallRoomPage() {
           <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <span className="text-white text-sm font-semibold">Call Chat</span>
-              <button onClick={() => setShowChat(false)} className="text-white"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowChat(false)} className="text-white">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {messages.map((item) => (
-                <div key={item.id} className="max-w-[80%] rounded-2xl bg-white/10 px-3 py-2 text-white">
+                <div
+                  key={item.id}
+                  className="max-w-[80%] rounded-2xl bg-white/10 px-3 py-2 text-white"
+                >
                   <div className="text-[10px] text-white/60">{item.senderName}</div>
                   <div className="text-sm">{item.text}</div>
                 </div>
               ))}
-              {messages.length === 0 && <div className="text-xs text-white/70">No messages yet.</div>}
+              {messages.length === 0 && (
+                <div className="text-xs text-white/70">No messages yet.</div>
+              )}
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="p-3 border-t border-white/10">
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="Type a message..." className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60" />
-              <button type="submit" disabled={!chatInput.trim()} className="mt-2 w-full py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold">Send</button>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendMessage();
+              }}
+              className="p-3 border-t border-white/10"
+            >
+              <input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className="mt-2 w-full py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold"
+              >
+                Send
+              </button>
             </form>
           </div>
         )}
@@ -536,7 +635,9 @@ export default function VideoCallRoomPage() {
       <div className="w-full lg:w-96 rounded-2xl border border-border bg-card p-6 flex flex-col gap-6 overflow-y-auto">
         <div>
           <h2 className="text-lg font-bold text-foreground">CRM & Call Notes</h2>
-          <p className="text-xs text-muted-foreground mt-1">Capture lead metrics and contact details directly into CRM.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Capture lead metrics and contact details directly into CRM.
+          </p>
         </div>
 
         {inviteUrl && (
@@ -645,48 +746,108 @@ export default function VideoCallRoomPage() {
 }
 
 function VideoLayout() {
-  const tracks = useTracks([Track.Source.Camera]);
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
-  const localTracks = tracks.filter((track) => track.participant.isLocal);
-  const remoteTracks = tracks.filter((track) => !track.participant.isLocal);
+  const localScreen = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare,
+  );
+  const localCameras = tracks.filter(
+    (t) => t.participant.isLocal && t.source === Track.Source.Camera,
+  );
+  const localCamera = localCameras[0];
 
-  const hasNoVideo = localTracks.length === 0 && remoteTracks.length === 0;
-  const allTracks = [...localTracks, ...remoteTracks];
-  const showHorizontal = allTracks.length > 1;
+  function getRemoteTracks(participantId: string, source: Track.Source) {
+    return tracks.find(
+      (t) =>
+        !t.participant.isLocal && t.participant.identity === participantId && t.source === source,
+    );
+  }
+
+  const remoteParticipants = Array.from(
+    new Set(
+      tracks
+        .filter((t) => !t.participant.isLocal && t.source === Track.Source.Camera)
+        .map((t) => t.participant.identity),
+    ),
+  );
+
+  const anyoneScreenSharing = Boolean(
+    localScreen || remoteParticipants.some((id) => getRemoteTracks(id, Track.Source.ScreenShare)),
+  );
+
+  const visibleParticipantIds: Array<string | 'local'> = [
+    ...remoteParticipants,
+    ...(localCamera ? ['local'] : []),
+  ];
+  const screenParticipantId = remoteParticipants.find((id) =>
+    getRemoteTracks(id, Track.Source.ScreenShare),
+  );
+  const screenTrackRef =
+    localScreen ||
+    (screenParticipantId
+      ? getRemoteTracks(screenParticipantId, Track.Source.ScreenShare)
+      : undefined);
 
   return (
     <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
-      {hasNoVideo ? (
+      {tracks.length === 0 ? (
         <div className="flex flex-col items-center justify-center space-y-4 text-center">
           <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
             <VideoOff className="w-10 h-10 text-zinc-500" />
           </div>
           <div>
             <p className="text-zinc-400 font-medium">Waiting for video...</p>
-            <p className="text-zinc-500 text-sm mt-1">Please allow camera access to see your video</p>
+            <p className="text-zinc-500 text-sm mt-1">
+              Please allow camera access to see your video
+            </p>
           </div>
         </div>
-      ) : showHorizontal ? (
-        <div className="flex gap-4 w-full h-full overflow-x-auto pb-4">
-          {allTracks.map((trackRef) => (
-            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900 flex-1 min-w-[300px] max-w-[50%]">
-              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                {trackRef.participant.isLocal ? 'You' : (trackRef.participant.name || trackRef.participant.identity)}
-              </div>
-              <ParticipantTile trackRef={trackRef} className="w-full h-full" />
-            </div>
-          ))}
-        </div>
       ) : (
-        <div className="grid gap-4 w-full h-full max-w-4xl">
-          {allTracks.map((trackRef) => (
-            <div key={trackRef.participant.identity} className="relative rounded-xl overflow-hidden bg-zinc-900">
+        <div className="flex gap-4 w-full h-full">
+          {anyoneScreenSharing && screenTrackRef && (
+            <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative">
               <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                {trackRef.participant.isLocal ? 'You' : (trackRef.participant.name || trackRef.participant.identity)}
+                {localScreen ? 'You (Screen)' : `${screenParticipantId || 'Participant'} (Screen)`}
               </div>
-              <ParticipantTile trackRef={trackRef} />
+              <ParticipantTile trackRef={screenTrackRef} className="w-full h-full" />
             </div>
-          ))}
+          )}
+          <div
+            className={`${anyoneScreenSharing ? 'flex flex-col gap-3' : 'grid gap-4 w-full h-full max-w-4xl grid-cols-1 md:grid-cols-2'}`}
+          >
+            {visibleParticipantIds.map((identityOrLocal) => {
+              const participantId = identityOrLocal === 'local' ? undefined : identityOrLocal;
+              const isLocal = identityOrLocal === 'local';
+              const cameraRef = isLocal
+                ? localCamera
+                : participantId
+                  ? getRemoteTracks(participantId, Track.Source.Camera)
+                  : null;
+              if (!cameraRef) return null;
+              const participant = cameraRef.participant;
+              return (
+                <div
+                  key={participant.identity}
+                  className="relative rounded-xl overflow-hidden bg-zinc-900"
+                  style={
+                    !anyoneScreenSharing ? { width: '100%' } : { width: '180px', height: '120px' }
+                  }
+                >
+                  <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                    {participant.isLocal ? 'You' : participant.name || participant.identity}
+                  </div>
+                  <ParticipantTile
+                    trackRef={cameraRef}
+                    style={
+                      !anyoneScreenSharing
+                        ? {}
+                        : { width: '100%', height: '100%', objectFit: 'cover' }
+                    }
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>

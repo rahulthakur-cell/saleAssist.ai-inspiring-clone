@@ -78,6 +78,67 @@ export class VideoCallService {
     return recording;
   }
 
+  async startRoomRecording(callId: string, tenantId: string): Promise<{ recordingId: string }> {
+    await this.prisma.setTenantContext(tenantId);
+    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+    if (!call) throw new NotFoundException('Video call not found');
+    if (!call.roomName) throw new NotFoundException('Room name not found for this call');
+
+    const result = await this.livekitService.startRoomRecording(call.roomName);
+    
+    const existingMetadata: Prisma.JsonObject =
+      call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
+        ? (call.metadata as Prisma.JsonObject)
+        : {};
+    
+    const metadata: Prisma.InputJsonObject = {
+      ...existingMetadata,
+      egressId: result.egressId,
+      recordingStatus: 'in_progress',
+    };
+
+    await this.prisma.videoCall.update({
+      where: { id: callId },
+      data: { metadata },
+    });
+
+    const recording = await this.prisma.videoCallRecording.create({
+      data: {
+        videoCallId: callId,
+        url: `recording:${result.egressId}`,
+      },
+    });
+
+    return { recordingId: recording.id };
+  }
+
+  async stopRoomRecording(callId: string, tenantId: string, recordingId?: string): Promise<void> {
+    await this.prisma.setTenantContext(tenantId);
+    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+    if (!call) throw new NotFoundException('Video call not found');
+
+    const existingMetadata: Prisma.JsonObject =
+      call.metadata && typeof call.metadata === 'object' && !Array.isArray(call.metadata)
+        ? (call.metadata as Prisma.JsonObject)
+        : {};
+    
+    const egressId = existingMetadata.egressId as string | undefined;
+    
+    const metadata: Prisma.InputJsonObject = {
+      ...existingMetadata,
+      recordingStatus: 'stopped',
+    };
+
+    if (egressId) {
+      await this.livekitService.stopRoomRecording(egressId);
+    }
+    
+    await this.prisma.videoCall.update({
+      where: { id: callId },
+      data: { metadata },
+    });
+  }
+
   getLiveKitConfig(): { liveKitUrl: string } {
     const liveKitUrl = this.configService.get<string>('LIVEKIT_URL', 'http://localhost:7880');
     return { liveKitUrl };
