@@ -21,6 +21,9 @@ import {
   MessageSquare,
   X,
   Send,
+  Hand,
+  Smile,
+  Save,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
@@ -34,12 +37,20 @@ function normalizeLiveKitUrl(url: string) {
 
 type CallControlsInnerProps = {
   onToggleChat: () => void;
+  onSendReaction?: (emoji: string) => void;
+  onRaiseHand?: () => void;
   isGuest?: boolean;
+  isHandRaised?: boolean;
+  onToggleRecording?: () => void;
+  isRecording?: boolean;
+  recordingSeconds?: number;
+  formatTime?: (s: number) => string;
 };
 
-function CallControlsInner({ onToggleChat, isGuest }: CallControlsInnerProps) {
+function CallControlsInner({ onToggleChat, onSendReaction, onRaiseHand, isGuest, isHandRaised, onToggleRecording, isRecording, recordingSeconds, formatTime }: CallControlsInnerProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
     useLocalParticipant();
+  const [showReactions, setShowReactions] = useState(false);
 
   const toggleMic = async () => {
     if (!localParticipant) return;
@@ -105,11 +116,50 @@ function CallControlsInner({ onToggleChat, isGuest }: CallControlsInnerProps) {
         {isScreenShareEnabled ? 'Stop Share' : 'Share Screen'}
       </button>
       <button
+        onClick={onToggleRecording}
+        className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${isRecording ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-border hover:border-zinc-700 text-white'}`}
+      >
+        {isRecording ? 'Stop Rec' : 'Record'}
+      </button>
+      {isRecording && recordingSeconds !== undefined && formatTime && (
+        <span className="text-xs font-mono text-white/90">{formatTime(recordingSeconds)}</span>
+      )}
+      <button
         onClick={onToggleChat}
         className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
       >
         <MessageSquare className="w-4 h-4" /> Chat
       </button>
+      {isGuest && onRaiseHand && (
+        <button
+          onClick={onRaiseHand}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${isHandRaised ? 'bg-amber-500 border-amber-400 text-white' : 'bg-zinc-900 border-border hover:border-zinc-700 text-white'}`}
+          title="Raise hand"
+        >
+          <Hand className="w-4 h-4" />
+        </button>
+      )}
+      {isGuest && onSendReaction && (
+        <div className="relative">
+          <button
+            onClick={() => setShowReactions(!showReactions)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
+            title="Reactions"
+          >
+            <Smile className="w-4 h-4" />
+          </button>
+          {showReactions && (
+            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 backdrop-blur-md border border-border/50 px-2 py-1.5 rounded-full">
+              <button onClick={() => { onSendReaction('👍'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Thumbs up">👍</button>
+              <button onClick={() => { onSendReaction('❤️'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Heart">❤️</button>
+              <button onClick={() => { onSendReaction('😂'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Laugh">😂</button>
+              <button onClick={() => { onSendReaction('raise_hand'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Raise hand">✋</button>
+            </div>
+          )}
+        </div>
+      )}
+
+
     </div>
   );
 }
@@ -121,20 +171,20 @@ function CustomerJoinCallInner() {
   const tenantId = searchParams.get('tenantId') || undefined;
 
   const [name, setName] = useState('');
-  const [token, setToken] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState<string | null>(null);
+  const [token, setToken] = useState < string | null > (null);
+  const [roomName, setRoomName] = useState < string | null > (null);
   const [error, setError] = useState('');
   const [isJoining, setIsJoining] = useState(false);
-  const [liveKitUrl, setLiveKitUrl] = useState<string | null>(null);
+  const [liveKitUrl, setLiveKitUrl] = useState < string | null > (null);
   const [liveKitConfigError, setLiveKitConfigError] = useState('');
 
   // Chat states
   const [showChat, setShowChat] = useState(false);
-  const [messages, setMessages] = useState<
-    Array<{ id: string; senderName: string; text: string; createdAt: string }>
-  >([]);
+  const [messages, setMessages] = useState <
+    Array < { id: string; senderName: string; text: string; createdAt: string } >
+  > ([]);
   const [chatInput, setChatInput] = useState('');
-  const chatSocketRef = useRef<any>(null);
+  const chatSocketRef = useRef < any > (null);
 
   const resolvedLiveKitUrl = normalizeLiveKitUrl(
     liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880',
@@ -213,6 +263,9 @@ function CustomerJoinCallInner() {
           ];
         });
       });
+      socket.on('call:reaction', (payload: any) => {
+        handleReactionReceived({ emoji: payload.emoji, participantName: payload.participantName });
+      });
       socket.connect();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to join chat');
@@ -247,9 +300,147 @@ function CustomerJoinCallInner() {
     }
   };
 
+  const reactionSocketRef = useRef < any > (null);
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [reactions, setReactions] = useState < Array < { id: string; emoji: string; participantName: string; timestamp: number } >> ([]);
+  const reactionsTimeoutRef = useRef < any > (null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef < MediaRecorder | null > (null);
+  const recordingTimerRef = useRef < any > (null);
+
+  const handleRaiseHand = async () => {
+    try {
+      if (!reactionSocketRef.current) {
+        reactionSocketRef.current = getSocket('/video', { tenantId });
+        reactionSocketRef.current.connect();
+      }
+      reactionSocketRef.current.emit('call:reaction', {
+        callId,
+        emoji: 'raise_hand',
+        participantName: name || 'Guest',
+      });
+      setIsHandRaised(!isHandRaised);
+      toast.success(isHandRaised ? 'Hand lowered' : 'Hand raised');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to raise hand');
+    }
+  };
+
+  const handleSendReaction = (emoji: string) => {
+    try {
+      if (!reactionSocketRef.current) {
+        reactionSocketRef.current = getSocket('/video', { tenantId });
+        reactionSocketRef.current.connect();
+      }
+      reactionSocketRef.current.emit('call:reaction', {
+        callId,
+        emoji,
+        participantName: name || 'Guest',
+      });
+    } catch (err: any) {
+      // Silent fail for reactions
+    }
+  };
+
+  const handleReactionReceived = (payload: { emoji: string; participantName: string }) => {
+    const reactionId = `${payload.emoji}-${Date.now()}`;
+    setReactions(prev => [...prev, { id: reactionId, emoji: payload.emoji, participantName: payload.participantName, timestamp: Date.now() }]);
+
+    if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
+    reactionsTimeoutRef.current = setTimeout(() => {
+      setReactions([]);
+    }, 3000);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleRecordingToggle = async () => {
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: { displaySurface: 'window' },
+          audio: true
+        });
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : MediaRecorder.isTypeSupported('video/webm')
+            ? 'video/webm'
+            : '';
+
+        if (!mime) {
+          toast.error('MediaRecorder not supported in this browser');
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+
+        const recorder = new MediaRecorder(stream, { mimeType: mime });
+        const chunks: Blob[] = [];
+
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        recorder.onstop = async () => {
+          const blob = new Blob(chunks, { type: mime });
+          const objectUrl = URL.createObjectURL(blob);
+          try {
+            await videoCallApi.uploadRecording(callId, {
+              url: objectUrl,
+              sizeBytes: blob.size,
+              durationSec: recordingSeconds,
+              mimeType: mime,
+            });
+            toast.success('Recording saved');
+          } catch {
+            toast.error('Failed to save recording');
+          }
+          stream.getTracks().forEach((t) => t.stop());
+          URL.revokeObjectURL(objectUrl);
+        };
+
+        recorder.start(1000);
+        mediaRecorderRef.current = recorder;
+        setIsRecording(true);
+        toast.success('Recording started - select the video call window/tab');
+      } catch (err: any) {
+        if (err?.name === 'NotAllowedError') {
+          toast.error('Screen recording permission denied');
+        } else {
+          toast.error('Could not start screen recording: ' + (err?.message || 'Unknown error'));
+        }
+      }
+    } else {
+      try {
+        mediaRecorderRef.current?.stop();
+        setIsRecording(false);
+        toast.info('Recording stopped');
+        if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
+        setRecordingSeconds(0);
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to stop recording');
+      }
+    }
+  };
+
+  useEffect(() => {
+    let interval: number | undefined;
+    if (isRecording) interval = window.setInterval(() => setRecordingSeconds((s) => s + 1), 1000);
+    return () => {
+      if (interval) window.clearInterval(interval);
+    };
+  }, [isRecording]);
+
   useEffect(() => {
     return () => {
       if (chatSocketRef.current) chatSocketRef.current.disconnect();
+      if (reactionSocketRef.current) reactionSocketRef.current.disconnect();
+      if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
+      if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
     };
   }, []);
 
@@ -289,7 +480,28 @@ function CustomerJoinCallInner() {
           <VideoLayout name={name} />
           <RoomAudioRenderer />
 
-          <CallControlsInner onToggleChat={handleChatToggle} isGuest={true} />
+          <CallControlsInner
+            onToggleChat={handleChatToggle}
+            onSendReaction={handleSendReaction}
+            onRaiseHand={handleRaiseHand}
+            onToggleRecording={handleRecordingToggle}
+            isGuest={true}
+            isHandRaised={isHandRaised}
+            isRecording={isRecording}
+            recordingSeconds={recordingSeconds}
+            formatTime={formatTime}
+          />
+
+          {/* Reaction overlay */}
+          {reactions.length > 0 && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex items-center justify-center gap-4 pointer-events-none">
+              {reactions.map((r) => (
+                <div key={r.id} className="text-6xl md:text-7xl animate-bounce">
+                  {r.emoji === 'raise_hand' ? '✋' : r.emoji}
+                </div>
+              ))}
+            </div>
+          )}
 
           {showChat && (
             <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex flex-col">
@@ -405,7 +617,7 @@ export default function CustomerJoinCallPage() {
 
 function VideoLayout({ name }: { name: string }) {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
-  
+
   const localCameras = tracks.filter((track) => track.participant.isLocal && track.source === Track.Source.Camera);
   const localScreen = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.ScreenShare);
   const remoteScreens = tracks.filter((track) => !track.participant.isLocal && track.source === Track.Source.ScreenShare);

@@ -281,4 +281,28 @@ export class VideoCallGateway implements OnGatewayConnection, OnGatewayDisconnec
     this.server.to(`call:${data.callId}`).emit('call:chat:message', payload);
     return { event: 'call:chat:message', data: payload };
   }
+
+  @SubscribeMessage('call:reaction')
+  async handleReaction(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { callId: string; emoji: string; participantName?: string },
+  ) {
+    const { tenantId, userId } = client.data;
+    if (!tenantId || !data.callId || !data.emoji) {
+      return { event: 'error', data: 'Invalid reaction data' };
+    }
+
+    await client.join(`call:${data.callId}`);
+    
+    const reactionPayload = {
+      callId: data.callId,
+      emoji: data.emoji,
+      participantId: userId || client.id,
+      participantName: data.participantName || 'Guest',
+      createdAt: new Date().toISOString(),
+    };
+
+    this.server.to(`call:${data.callId}`).emit('call:reaction', reactionPayload);
+    return { event: 'call:reaction', data: reactionPayload };
+  }
 }

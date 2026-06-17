@@ -511,46 +511,59 @@ const formatTime = (seconds: number) => {
      return `${mins}:${secs.toString().padStart(2, '0')}`;
    };
 
-   const [isHandRaised, setIsHandRaised] = useState(false);
-   const reactionSocketRef = useRef<any>(null);
+const [isHandRaised, setIsHandRaised] = useState(false);
+    const reactionSocketRef = useRef<any>(null);
+    const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; participantName: string; timestamp: number }>>([]);
+    const reactionsTimeoutRef = useRef<any>(null);
 
-   const handleRaiseHand = async () => {
-     try {
-       if (!reactionSocketRef.current) {
-         reactionSocketRef.current = getSocket('/video', {
-           tenantId: localStorage.getItem('tenantId') || undefined,
-         });
-         reactionSocketRef.current.connect();
-       }
-       reactionSocketRef.current.emit('call:reaction', {
-         callId,
-         emoji: 'raise_hand',
-         participantName: 'You',
-       });
-       setIsHandRaised(!isHandRaised);
-       toast.success(isHandRaised ? 'Hand lowered' : 'Hand raised');
-     } catch (err: any) {
-       toast.error(err?.message || 'Failed to raise hand');
-     }
-   };
+    const handleRaiseHand = async () => {
+      try {
+        if (!reactionSocketRef.current) {
+          reactionSocketRef.current = getSocket('/video', {
+            tenantId: localStorage.getItem('tenantId') || undefined,
+          });
+          reactionSocketRef.current.connect();
+        }
+        reactionSocketRef.current.emit('call:reaction', {
+          callId,
+          emoji: 'raise_hand',
+          participantName: 'You',
+        });
+        setIsHandRaised(!isHandRaised);
+        toast.success(isHandRaised ? 'Hand lowered' : 'Hand raised');
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to raise hand');
+      }
+    };
 
-   const handleSendReaction = (emoji: string) => {
-     try {
-       if (!reactionSocketRef.current) {
-         reactionSocketRef.current = getSocket('/video', {
-           tenantId: localStorage.getItem('tenantId') || undefined,
-         });
-         reactionSocketRef.current.connect();
-       }
-       reactionSocketRef.current.emit('call:reaction', {
-         callId,
-         emoji,
-         participantName: 'You',
-       });
-     } catch (err: any) {
-       // Silent fail for reactions
-     }
-   };
+    const handleSendReaction = (emoji: string) => {
+      try {
+        if (!reactionSocketRef.current) {
+          reactionSocketRef.current = getSocket('/video', {
+            tenantId: localStorage.getItem('tenantId') || undefined,
+          });
+          reactionSocketRef.current.connect();
+        }
+        reactionSocketRef.current.emit('call:reaction', {
+          callId,
+          emoji,
+          participantName: 'You',
+        });
+      } catch (err: any) {
+        // Silent fail for reactions
+      }
+    };
+
+    const handleReactionReceived = (payload: { emoji: string; participantName: string }) => {
+      const reactionId = `${payload.emoji}-${Date.now()}`;
+      setReactions(prev => [...prev, { id: reactionId, emoji: payload.emoji, participantName: payload.participantName, timestamp: Date.now() }]);
+      
+      // Clear reactions after 3 seconds
+      if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
+      reactionsTimeoutRef.current = setTimeout(() => {
+        setReactions([]);
+      }, 3000);
+    };
 
    const handleChatToggle = () => {
     console.log('[Controls] handleChatToggle clicked', { next: !showChat });
@@ -567,21 +580,24 @@ const formatTime = (seconds: number) => {
       });
       chatSocketRef.current = socket;
       socket.on('connect', () => socket.emit('call:join', { callId }));
-      socket.on('call:chat:message', (payload: any) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
-          return [
-            ...prev,
-            {
-              id: payload.id,
-              senderName: payload.senderName,
-              text: payload.message || payload.text,
-              createdAt: payload.createdAt,
-            },
-          ];
-        });
-      });
-      socket.connect();
+socket.on('call:chat:message', (payload: any) => {
+         setMessages((prev) => {
+           if (prev.some((m) => m.id === payload.id)) return prev;
+           return [
+             ...prev,
+             {
+               id: payload.id,
+               senderName: payload.senderName,
+               text: payload.message || payload.text,
+               createdAt: payload.createdAt,
+             },
+           ];
+         });
+       });
+       socket.on('call:reaction', (payload: any) => {
+         handleReactionReceived({ emoji: payload.emoji, participantName: payload.participantName });
+       });
+       socket.connect();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to join chat');
       setShowChat(false);
@@ -624,6 +640,8 @@ const formatTime = (seconds: number) => {
     return () => {
       if (recordingTimerRef.current) window.clearInterval(recordingTimerRef.current);
       if (chatSocketRef.current) chatSocketRef.current.disconnect();
+      if (reactionSocketRef.current) reactionSocketRef.current.disconnect();
+      if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
     };
   }, []);
 
@@ -701,6 +719,17 @@ const formatTime = (seconds: number) => {
             onSendReaction={handleSendReaction}
             isHandRaised={isHandRaised}
           />
+
+          {/* Reaction overlay */}
+          {reactions.length > 0 && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 flex items-center justify-center gap-4 pointer-events-none">
+              {reactions.map((r) => (
+                <div key={r.id} className="text-6xl md:text-7xl animate-bounce">
+                  {r.emoji === 'raise_hand' ? '✋' : r.emoji}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Top-right controls */}
           <div className="absolute top-4 right-4 z-40 flex items-center gap-2">
