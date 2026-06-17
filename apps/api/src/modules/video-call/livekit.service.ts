@@ -32,11 +32,21 @@ export class LivekitService {
         this.apiKey,
         this.apiSecret,
       );
+      
+      // Configure egress with S3 storage if available
+      const minioEndpoint = this.configService.get<string>('MINIO_ENDPOINT');
+      const minioPort = this.configService.get<string>('MINIO_PORT', '9000');
+      const minioAccessKey = this.configService.get<string>('MINIO_ACCESS_KEY');
+      const minioSecretKey = this.configService.get<string>('MINIO_SECRET_KEY');
+      const minioBucket = this.configService.get<string>('MINIO_BUCKET', 'saleassist');
+      const minioUseSSL = this.configService.get<boolean>('MINIO_USE_SSL', false);
+      
       this.egressService = new EgressClient(
         this.getRoomServiceUrl(this.livekitUrl),
         this.apiKey,
         this.apiSecret,
       );
+      
       this.logger.log('LiveKit services initialized successfully');
     } catch (error: any) {
       this.logger.error(`Failed to initialize LiveKit services: ${error.message}`);
@@ -67,7 +77,7 @@ export class LivekitService {
       canPublishData: true,
     });
 
-    return token.toJwt();
+return token.toJwt();
   }
 
   /**
@@ -98,9 +108,33 @@ export class LivekitService {
     }
 
     try {
-      const output = {
-        filepath: `recordings/${roomName}-${Date.now()}.mp4`,
-      } as any;
+      // Configure S3 output if MinIO is available
+      const minioEndpoint = this.configService.get<string>('MINIO_ENDPOINT');
+      const minioPort = this.configService.get<string>('MINIO_PORT', '9000');
+      const minioAccessKey = this.configService.get<string>('MINIO_ACCESS_KEY');
+      const minioSecretKey = this.configService.get<string>('MINIO_SECRET_KEY');
+      const minioBucket = this.configService.get<string>('MINIO_BUCKET', 'saleassist');
+
+      let output: any;
+      if (minioEndpoint && minioAccessKey && minioSecretKey) {
+        // Configure S3-compatible storage (MinIO)
+        const s3Endpoint = `http://${minioEndpoint}:${minioPort}`;
+        output = {
+          s3: {
+            bucket: minioBucket,
+            region: 'us-east-1',
+            accessKey: minioAccessKey,
+            secretKey: minioSecretKey,
+            endpoint: s3Endpoint,
+            forcePathStyle: true,
+          },
+        };
+      } else {
+        // Fallback to local filepath (works with LiveKit dev server)
+        output = {
+          filepath: `recordings/${roomName}-${Date.now()}.mp4`,
+        };
+      }
 
       const egress = await this.egressService.startRoomCompositeEgress(
         roomName,

@@ -84,7 +84,7 @@ function CallControlsInner({ onToggleChat, isGuest }: CallControlsInnerProps) {
         ) : (
           <MicOff className="w-4 h-4 text-rose-500" />
         )}
-        {isMicrophoneEnabled ? 'Mute Microphone' : 'Unmute Microphone'}
+        {isMicrophoneEnabled ? 'Mute ' : 'Unmute '}
       </button>
       <button
         onClick={toggleCamera}
@@ -404,15 +404,19 @@ export default function CustomerJoinCallPage() {
 }
 
 function VideoLayout({ name }: { name: string }) {
-  const tracks = useTracks([Track.Source.Camera]);
-  const localTracks = tracks.filter((track) => track.participant.isLocal);
-  const remoteTracks = tracks.filter((track) => !track.participant.isLocal);
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+  
+  const localCameras = tracks.filter((track) => track.participant.isLocal && track.source === Track.Source.Camera);
+  const localScreen = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.ScreenShare);
+  const remoteScreens = tracks.filter((track) => !track.participant.isLocal && track.source === Track.Source.ScreenShare);
+  const remoteCameras = tracks.filter((track) => !track.participant.isLocal && track.source === Track.Source.Camera);
 
-  const hasNoVideo = localTracks.length === 0 && remoteTracks.length === 0;
+  const anyoneSharingScreen = Boolean(localScreen || remoteScreens.length > 0);
+  const hasRemoteVideo = remoteCameras.length > 0 || remoteScreens.length > 0;
 
   return (
     <div className="flex-1 flex items-center justify-center p-4">
-      {hasNoVideo ? (
+      {!hasRemoteVideo && !localScreen ? (
         <div className="flex flex-col items-center justify-center space-y-4 text-center">
           <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
             <VideoOff className="w-10 h-10 text-zinc-500" />
@@ -425,31 +429,41 @@ function VideoLayout({ name }: { name: string }) {
           </div>
         </div>
       ) : (
-        <div
-          className={`grid gap-4 w-full h-full ${remoteTracks.length > 1 ? 'grid-cols-2' : remoteTracks.length === 1 ? 'grid-cols-1 max-w-4xl' : 'grid-cols-1 max-w-2xl'}`}
-        >
-          {localTracks.map((trackRef) => (
-            <div
-              key={trackRef.participant.identity}
-              className="relative rounded-xl overflow-hidden bg-zinc-900"
-            >
+        <div className="flex gap-4 w-full h-full">
+          {anyoneSharingScreen && (
+            <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative">
               <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                {name || 'You'}
+                {localScreen ? 'You (Screen)' : (remoteScreens[0]?.participant?.name || remoteScreens[0]?.participant?.identity || 'Agent') + ' (Screen)'}
               </div>
-              <ParticipantTile trackRef={trackRef} />
+              <ParticipantTile trackRef={localScreen || remoteScreens[0]} className="w-full h-full" />
             </div>
-          ))}
-          {remoteTracks.map((trackRef) => (
-            <div
-              key={trackRef.participant.identity}
-              className="relative rounded-xl overflow-hidden bg-zinc-900"
-            >
-              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
-                {trackRef.participant.name || trackRef.participant.identity}
+          )}
+          <div className={`grid gap-4 ${anyoneSharingScreen ? 'flex flex-col' : 'w-full max-w-4xl'} ${anyoneSharingScreen ? 'w-[180px]' : 'grid-cols-1 md:grid-cols-2'}`}>
+            {localCameras.map((trackRef) => (
+              <div
+                key={trackRef.participant.identity}
+                className="relative rounded-xl overflow-hidden bg-zinc-900"
+                style={anyoneSharingScreen ? { width: '180px', height: '120px' } : undefined}
+              >
+                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                  {name || 'You'}
+                </div>
+                <ParticipantTile trackRef={trackRef} style={anyoneSharingScreen ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} />
               </div>
-              <ParticipantTile trackRef={trackRef} />
-            </div>
-          ))}
+            ))}
+            {remoteCameras.map((trackRef) => (
+              <div
+                key={trackRef.participant.identity}
+                className="relative rounded-xl overflow-hidden bg-zinc-900"
+                style={anyoneSharingScreen ? { width: '180px', height: '120px' } : undefined}
+              >
+                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                  {trackRef.participant.name || trackRef.participant.identity}
+                </div>
+                <ParticipantTile trackRef={trackRef} style={anyoneSharingScreen ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} />
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
