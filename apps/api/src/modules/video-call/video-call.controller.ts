@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
@@ -113,12 +114,11 @@ export class VideoCallController {
   async sendChat(
     @Param('id') callId: string,
     @TenantId() tenantId: string,
-    @Body() dto: { message: string; senderName: string; senderId?: string },
+    @Body() dto: { message: string; senderName: string; senderId?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string },
   ): Promise<any> {
     console.log('[sendChat] hit', { callId, tenantId, dto });
     try {
       const result = await this.videoCallService.sendChatMessage(callId, tenantId, dto);
-      // Broadcast the message to the socket room
       this.videoCallGateway.server.to(`call:${callId}`).emit('call:chat:message', {
         id: result.id,
         callId: result.videoCallId,
@@ -126,6 +126,9 @@ export class VideoCallController {
         senderId: result.senderId || dto.senderId,
         senderName: result.senderName,
         createdAt: result.createdAt.toISOString(),
+        attachmentUrl: result.attachmentUrl,
+        attachmentType: result.attachmentType,
+        attachmentName: result.attachmentName,
       });
       return result;
     } catch (err) {
@@ -134,14 +137,36 @@ export class VideoCallController {
     }
   }
 
+  @Post(':id/chat/upload')
+  @Public()
+  @ApiOperation({ summary: 'Get presigned URL for uploading chat attachment' })
+  async getChatUploadUrl(
+    @Param('id') callId: string,
+    @TenantId() tenantId: string,
+    @Query('tenantId') queryTenantId: string,
+    @Body() dto: { fileName: string; fileType: string },
+  ): Promise<any> {
+    const effectiveTenantId = tenantId || queryTenantId;
+    if (!effectiveTenantId) {
+      throw new BadRequestException('Tenant ID required');
+    }
+    return this.videoCallService.getChatAttachmentUploadUrl(callId, effectiveTenantId, dto);
+  }
+
   @Post(':id/recordings/upload')
-  @ApiOperation({ summary: 'Upload a video call recording' })
+  @Public()
+  @ApiOperation({ summary: 'Get presigned URL for uploading a video call recording' })
   async uploadRecording(
     @Param('id') callId: string,
     @TenantId() tenantId: string,
-    @Body() dto: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string; file?: string },
+    @Query('tenantId') queryTenantId: string,
+    @Body() dto: { sizeBytes?: number; durationSec?: number; mimeType?: string },
   ): Promise<any> {
-    return this.videoCallService.attachRecording(callId, tenantId, dto);
+    const effectiveTenantId = tenantId || queryTenantId;
+    if (!effectiveTenantId) {
+      throw new BadRequestException('Tenant ID required');
+    }
+    return this.videoCallService.attachRecording(callId, effectiveTenantId, dto);
   }
 
   @Post(':id/recordings/start')

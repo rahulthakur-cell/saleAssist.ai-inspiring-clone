@@ -2,6 +2,46 @@ import { IsEnum, IsOptional, IsString, IsEmail, IsDateString, MaxLength } from '
 import { ApiProperty } from '@nestjs/swagger';
 import { VideoCallType } from '@saleassist/database';
 
+export class SendChatMessageDto {
+  @ApiProperty()
+  @IsString()
+  message!: string;
+
+  @ApiProperty()
+  @IsString()
+  senderName!: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  senderId?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  attachmentUrl?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  attachmentType?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  attachmentName?: string;
+}
+
+export class GetChatUploadUrlDto {
+  @ApiProperty()
+  @IsString()
+  fileName!: string;
+
+  @ApiProperty()
+  @IsString()
+  fileType!: string;
+}
+
 export class CreateCallDto {
   @ApiProperty({ enum: VideoCallType, default: VideoCallType.INBOUND })
   @IsEnum(VideoCallType)

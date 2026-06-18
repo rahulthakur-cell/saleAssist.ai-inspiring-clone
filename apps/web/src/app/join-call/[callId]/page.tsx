@@ -12,19 +12,21 @@ import {
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import {
-  PhoneCall,
-  VideoOff,
-  Mic,
-  MicOff,
-  Video,
-  LayoutGrid,
-  MessageSquare,
-  X,
-  Send,
-  Hand,
-  Smile,
-  Save,
-} from 'lucide-react';
+   PhoneCall,
+   VideoOff,
+   Mic,
+   MicOff,
+   Video,
+   LayoutGrid,
+   MessageSquare,
+   X,
+   Send,
+   Hand,
+   Smile,
+   Save,
+   Paperclip,
+   Camera,
+   } from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
@@ -178,13 +180,14 @@ function CustomerJoinCallInner() {
   const [liveKitUrl, setLiveKitUrl] = useState < string | null > (null);
   const [liveKitConfigError, setLiveKitConfigError] = useState('');
 
-  // Chat states
-  const [showChat, setShowChat] = useState(false);
-  const [messages, setMessages] = useState <
-    Array < { id: string; senderName: string; text: string; createdAt: string } >
-  > ([]);
-  const [chatInput, setChatInput] = useState('');
-  const chatSocketRef = useRef < any > (null);
+// Chat states
+   const [showChat, setShowChat] = useState(false);
+   const [messages, setMessages] = useState <
+     Array < { id: string; senderName: string; text: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string } >
+   > ([]);
+   const [chatInput, setChatInput] = useState('');
+   const chatSocketRef = useRef < any > (null);
+   const fileInputRef = useRef < HTMLInputElement > (null);
 
   const resolvedLiveKitUrl = normalizeLiveKitUrl(
     liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880',
@@ -249,20 +252,23 @@ function CustomerJoinCallInner() {
       const socket = getSocket('/video', { tenantId });
       chatSocketRef.current = socket;
       socket.on('connect', () => socket.emit('call:join', { callId }));
-      socket.on('call:chat:message', (payload: any) => {
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.id)) return prev;
-          return [
-            ...prev,
-            {
-              id: payload.id,
-              senderName: payload.senderName,
-              text: payload.message || payload.text,
-              createdAt: payload.createdAt,
-            },
-          ];
-        });
-      });
+socket.on('call:chat:message', (payload: any) => {
+         setMessages((prev) => {
+           if (prev.some((m) => m.id === payload.id)) return prev;
+           return [
+             ...prev,
+             {
+               id: payload.id,
+               senderName: payload.senderName,
+               text: payload.message || payload.text,
+               createdAt: payload.createdAt,
+               attachmentUrl: payload.attachmentUrl,
+               attachmentType: payload.attachmentType,
+               attachmentName: payload.attachmentName,
+             },
+           ];
+         });
+       });
       socket.on('call:reaction', (payload: any) => {
         handleReactionReceived({ emoji: payload.emoji, participantName: payload.participantName });
       });
@@ -273,7 +279,7 @@ function CustomerJoinCallInner() {
     }
   };
 
-  const handleSendMessage = async () => {
+const handleSendMessage = async () => {
     const text = chatInput.trim();
     if (!text) return;
     try {
@@ -290,6 +296,9 @@ function CustomerJoinCallInner() {
             senderName: saved.senderName,
             text: saved.message,
             createdAt: saved.createdAt,
+            attachmentUrl: saved.attachmentUrl,
+            attachmentType: saved.attachmentType,
+            attachmentName: saved.attachmentName,
           },
         ];
       });
@@ -297,6 +306,84 @@ function CustomerJoinCallInner() {
     } catch (err: any) {
       console.error('[Guest Chat] Send message failed:', err);
       toast.error(err?.message || 'Failed to send message');
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      const { presignedUrl, publicUrl } = await videoCallApi.getChatUploadUrl(callId, {
+        fileName: file.name,
+        fileType: file.type,
+      }, tenantId);
+
+      const uploadRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file');
+      }
+
+      const saved = await videoCallApi.sendChatMessage(callId, {
+        message: file.name,
+        senderName: name || 'Guest',
+        attachmentUrl: publicUrl,
+        attachmentType: file.type,
+        attachmentName: file.name,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === saved.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: saved.id,
+            senderName: saved.senderName,
+            text: saved.message,
+            createdAt: saved.createdAt,
+            attachmentUrl: saved.attachmentUrl,
+            attachmentType: saved.attachmentType,
+            attachmentName: saved.attachmentName,
+          },
+        ];
+      });
+      toast.success('File attached successfully');
+    } catch (err: any) {
+      console.error('[Guest Chat] File upload failed:', err);
+      toast.error(err?.message || 'Failed to upload file');
+    }
+  };
+
+  const handleScreenshot = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'screen' },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      const imageBlob = await new Promise<Blob>((resolve) => {
+        const canvas = document.createElement('canvas');
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d')?.drawImage(video, 0, 0);
+          canvas.toBlob((blob) => {
+            stream.getTracks().forEach((t) => t.stop());
+            if (blob) resolve(blob);
+          }, 'image/png');
+        };
+      });
+
+      const file = new File([imageBlob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
+      await handleFileUpload(file);
+    } catch (err: any) {
+      if (err?.name !== 'NotAllowedError') {
+        toast.error(err?.message || 'Failed to capture screenshot');
+      }
     }
   };
 
@@ -387,20 +474,32 @@ function CustomerJoinCallInner() {
 
         recorder.onstop = async () => {
           const blob = new Blob(chunks, { type: mime });
-          const objectUrl = URL.createObjectURL(blob);
+          
           try {
-            await videoCallApi.uploadRecording(callId, {
-              url: objectUrl,
+            // Get presigned URL from backend
+            const { presignedUrl } = await videoCallApi.uploadRecording(callId, {
               sizeBytes: blob.size,
               durationSec: recordingSeconds,
               mimeType: mime,
             });
-            toast.success('Recording saved');
-          } catch {
-            toast.error('Failed to save recording');
+            
+            // Upload blob directly to MinIO
+            const uploadRes = await fetch(presignedUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': mime },
+              body: blob,
+            });
+            
+            if (!uploadRes.ok) {
+              throw new Error('Failed to upload to storage');
+            }
+            
+            toast.success('Recording saved successfully to MinIO');
+          } catch (err: any) {
+            toast.error('Failed to save recording: ' + (err?.message || 'Unknown error'));
           }
+          
           stream.getTracks().forEach((t) => t.stop());
-          URL.revokeObjectURL(objectUrl);
         };
 
         recorder.start(1000);
@@ -511,41 +610,91 @@ function CustomerJoinCallInner() {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {messages.map((item) => (
-                  <div
-                    key={item.id}
-                    className="max-w-[80%] rounded-2xl bg-white/10 px-3 py-2 text-white"
-                  >
-                    <div className="text-[10px] text-white/60">{item.senderName}</div>
-                    <div className="text-sm">{item.text}</div>
-                  </div>
-                ))}
-                {messages.length === 0 && (
-                  <div className="text-xs text-white/70">No messages yet.</div>
-                )}
-              </div>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendMessage();
-                }}
-                className="p-3 border-t border-white/10"
-              >
-                <input
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Type a message..."
-                  className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60"
-                />
-                <button
-                  type="submit"
-                  disabled={!chatInput.trim()}
-                  className="mt-2 w-full py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold"
-                >
-                  Send
-                </button>
-              </form>
+<div className="flex-1 overflow-y-auto p-4 space-y-3">
+                 {messages.map((item) => (
+                   <div
+                     key={item.id}
+                     className="max-w-[80%] rounded-2xl bg-white/10 px-3 py-2 text-white"
+                   >
+                     <div className="text-[10px] text-white/60">{item.senderName}</div>
+                     {item.attachmentUrl ? (
+                       item.attachmentType?.startsWith('image/') ? (
+                         <img
+                           src={item.attachmentUrl}
+                           alt={item.attachmentName || 'Attachment'}
+                           className="max-w-full max-h-48 rounded-lg mt-1"
+                         />
+                       ) : (
+                         <a
+                           href={item.attachmentUrl}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="text-violet-400 text-sm underline mt-1 block"
+                         >
+                           {item.attachmentName || item.text}
+                         </a>
+                       )
+                     ) : (
+                       <div className="text-sm">{item.text}</div>
+                     )}
+                   </div>
+                 ))}
+                 {messages.length === 0 && (
+                   <div className="text-xs text-white/70">No messages yet.</div>
+                 )}
+               </div>
+<form
+               onSubmit={(e) => {
+                 e.preventDefault();
+                 handleSendMessage();
+               }}
+               className="p-3 border-t border-white/10"
+             >
+               <input
+                 ref={fileInputRef}
+                 type="file"
+                 accept="image/*,application/pdf,.doc,.docx,.txt,.csv"
+                 onChange={(e) => {
+                   const file = e.target.files?.[0];
+                   if (file) handleFileUpload(file);
+                   e.target.value = '';
+                 }}
+                 className="hidden"
+               />
+               <div className="flex gap-2">
+                 <button
+                   type="button"
+                   onClick={() => fileInputRef.current?.click()}
+                   className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20"
+                   title="Attach file"
+                 >
+                   <Paperclip className="w-4 h-4" />
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleScreenshot}
+                   className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20"
+                   title="Take screenshot"
+                 >
+                   <Camera className="w-4 h-4" />
+                 </button>
+               </div>
+               <div className="flex gap-2 mt-2">
+                 <input
+                   value={chatInput}
+                   onChange={(e) => setChatInput(e.target.value)}
+                   placeholder="Type a message..."
+                   className="flex-1 rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60"
+                 />
+                 <button
+                   type="submit"
+                   disabled={!chatInput.trim()}
+                   className="px-4 py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold"
+                 >
+                   Send
+                 </button>
+               </div>
+             </form>
             </div>
           )}
         </LiveKitRoom>
@@ -640,42 +789,67 @@ function VideoLayout({ name }: { name: string }) {
             </p>
           </div>
         </div>
-      ) : (
-        <div className="flex gap-4 w-full h-full">
-          {anyoneSharingScreen && (
-            <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative">
-              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                {localScreen ? 'You (Screen)' : (remoteScreens[0]?.participant?.name || remoteScreens[0]?.participant?.identity || 'Agent') + ' (Screen)'}
-              </div>
-              <ParticipantTile trackRef={localScreen || remoteScreens[0]} className="w-full h-full" />
+      ) : anyoneSharingScreen ? (
+        // Screen sharing layout: main screen + small camera thumbnails
+        <div className="flex flex-col lg:flex-row gap-4 w-full h-full">
+          <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative min-h-0">
+            <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+              {localScreen ? 'You (Screen)' : (remoteScreens[0]?.participant?.name || remoteScreens[0]?.participant?.identity || 'Agent') + ' (Screen)'}
             </div>
-          )}
-          <div className={`grid gap-4 ${anyoneSharingScreen ? 'flex flex-col' : 'w-full max-w-4xl'} ${anyoneSharingScreen ? 'w-[180px]' : 'grid-cols-1 md:grid-cols-2'}`}>
+            <ParticipantTile trackRef={localScreen || remoteScreens[0]} className="w-full h-full" />
+          </div>
+          <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto lg:w-52">
             {localCameras.map((trackRef) => (
               <div
                 key={trackRef.participant.identity}
-                className="relative rounded-xl overflow-hidden bg-zinc-900"
-                style={anyoneSharingScreen ? { width: '180px', height: '120px' } : undefined}
+                className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
+                style={{ maxWidth: '200px', maxHeight: '150px' }}
               >
-                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
                   {name || 'You'}
                 </div>
-                <ParticipantTile trackRef={trackRef} style={anyoneSharingScreen ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} />
+                <ParticipantTile trackRef={trackRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
             ))}
             {remoteCameras.map((trackRef) => (
               <div
                 key={trackRef.participant.identity}
-                className="relative rounded-xl overflow-hidden bg-zinc-900"
-                style={anyoneSharingScreen ? { width: '180px', height: '120px' } : undefined}
+                className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
+                style={{ maxWidth: '200px', maxHeight: '150px' }}
               >
-                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-zinc-700/90 text-white text-[10px] font-semibold">
                   {trackRef.participant.name || trackRef.participant.identity}
                 </div>
-                <ParticipantTile trackRef={trackRef} style={anyoneSharingScreen ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} />
+                <ParticipantTile trackRef={trackRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </div>
             ))}
           </div>
+        </div>
+      ) : (
+        // Regular grid layout for camera-only calls
+        <div className="grid gap-4 w-full h-full max-w-6xl grid-cols-1 md:grid-cols-2">
+          {localCameras.map((trackRef) => (
+            <div
+              key={trackRef.participant.identity}
+              className="relative rounded-xl overflow-hidden bg-zinc-900"
+            >
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                {name || 'You'}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+          {remoteCameras.map((trackRef) => (
+            <div
+              key={trackRef.participant.identity}
+              className="relative rounded-xl overflow-hidden bg-zinc-900"
+            >
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                {trackRef.participant.name || trackRef.participant.identity}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
         </div>
       )}
     </div>

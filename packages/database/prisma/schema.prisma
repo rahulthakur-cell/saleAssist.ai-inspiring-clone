@@ -409,6 +409,9 @@ model VideoCallChatMessage {
   senderId     String?
   senderName   String
   message      String
+  attachmentUrl String?
+  attachmentType String?
+  attachmentName String?
   createdAt    DateTime @default(now())
 
   videoCall VideoCall @relation(fields: [videoCallId], references: [id], onDelete: Cascade)

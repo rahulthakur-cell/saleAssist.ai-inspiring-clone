@@ -7,6 +7,7 @@ import { CreateCallDto } from './dto/create-call.dto';
 import { VideoCallStatus, VideoCallType, LeadSource, LeadStatus, Prisma } from '@saleassist/database';
 import { nanoid } from 'nanoid';
 import { PosthogService } from '../analytics/posthog.service';
+import { StorageService } from '../storage/storage.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -21,6 +22,7 @@ export class VideoCallService {
     private readonly livekitService: LivekitService,
     private readonly posthogService: PosthogService,
     private readonly configService: ConfigService,
+    private readonly storage: StorageService,
   ) {
     if (!fs.existsSync(this.uploadDir)) fs.mkdirSync(this.uploadDir, { recursive: true });
   }
@@ -34,7 +36,7 @@ export class VideoCallService {
     return messages;
   }
 
-  async sendChatMessage(callId: string, tenantId: string, data: { message: string; senderName: string; senderId?: string }) {
+  async sendChatMessage(callId: string, tenantId: string, data: { message: string; senderName: string; senderId?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }) {
     await this.prisma.setTenantContext(tenantId);
     this.logger.debug(`sendChatMessage start callId=${callId} tenantId=${tenantId} payload=${JSON.stringify({ message: data.message, senderName: data.senderName, senderId: data.senderId })}`);
     let message;
@@ -45,6 +47,9 @@ export class VideoCallService {
           senderId: data.senderId,
           senderName: data.senderName,
           message: data.message,
+          attachmentUrl: data.attachmentUrl,
+          attachmentType: data.attachmentType,
+          attachmentName: data.attachmentName,
         },
       });
     } catch (err) {
@@ -55,27 +60,61 @@ export class VideoCallService {
     return message;
   }
 
-  async attachRecording(callId: string, tenantId: string, data: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string }) {
+  async getChatAttachmentUploadUrl(callId: string, tenantId: string, data: { fileName: string; fileType: string }) {
     await this.prisma.setTenantContext(tenantId);
     const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
     if (!call) throw new NotFoundException('Video call not found');
 
-    const recording = await this.prisma.videoCallRecording.create({
-      data: {
-        videoCallId: callId,
-        url: data.url,
-        sizeBytes: data.sizeBytes,
-        durationSec: data.durationSec,
-        mimeType: data.mimeType,
-      },
-    });
+    const ext = data.fileName.split('.').pop() || '';
+    const objectName = `chat-attachments/${callId}-${nanoid(8)}.${ext}`;
+    const minioEndpoint = this.configService.get<string>('MINIO_ENDPOINT', 'localhost');
+    const minioPort = this.configService.get<string>('MINIO_PORT', '9000');
+    const minioUseSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
+    const protocol = minioUseSSL ? 'https' : 'http';
+    const publicUrl = `${protocol}://${minioEndpoint}:${minioPort}/saleassist/${objectName}`;
+    const presignedUrl = await this.storage.getPresignedUploadUrl(objectName);
 
-    await this.prisma.videoCall.update({
-      where: { id: callId },
-      data: { recordingUrl: data.url },
-    });
+    return { presignedUrl, publicUrl, objectName };
+  }
 
-    return recording;
+  async attachRecording(callId: string, tenantId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }) {
+    await this.prisma.setTenantContext(tenantId);
+    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+    if (!call) throw new NotFoundException('Video call not found');
+
+    try {
+      // Generate a unique object name for the recording
+      const objectName = `recordings/${callId}-${Date.now()}.${data.mimeType?.includes('webm') ? 'webm' : 'mp4'}`;
+      
+      // Get public URL for the recording
+      const minioEndpoint = this.configService.get<string>('MINIO_ENDPOINT', 'localhost');
+      const minioPort = this.configService.get<string>('MINIO_PORT', '9000');
+      const minioUseSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
+      const protocol = minioUseSSL ? 'https' : 'http';
+      const publicUrl = `${protocol}://${minioEndpoint}:${minioPort}/saleassist/${objectName}`;
+
+      const recording = await this.prisma.videoCallRecording.create({
+        data: {
+          videoCallId: callId,
+          url: publicUrl,
+          sizeBytes: data.sizeBytes,
+          durationSec: data.durationSec,
+          mimeType: data.mimeType,
+        },
+      });
+
+      await this.prisma.videoCall.update({
+        where: { id: callId },
+        data: { recordingUrl: publicUrl },
+      });
+
+      // Return presigned URL for frontend to upload directly
+      const presignedUrl = await this.storage.getPresignedUploadUrl(objectName);
+      return { ...recording, presignedUrl, objectName };
+    } catch (err: any) {
+      this.logger.error(`Failed to prepare recording upload: ${err.message}`);
+      throw err;
+    }
   }
 
   async startRoomRecording(callId: string, tenantId: string): Promise<{ recordingId: string; fallbackToScreen?: boolean }> {

@@ -188,12 +188,14 @@ export const videoCallApi = {
   getConfig: () => apiClient<{ liveKitUrl: string }>('/video-calls/livekit-config'),
   list: (limit = 20, page = 1) => apiClient<any>(`/video-calls?limit=${limit}&page=${page}`),
   getQueue: () => apiClient<{ waitingCount: number }>('/video-calls/queue'),
-  getChatHistory: (callId: string) =>
-    apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string }>>(`/video-calls/${callId}/chat`),
-  sendChatMessage: (callId: string, data: { message: string; senderName?: string }) =>
-    apiClient<{ id: string; senderName: string; message: string; createdAt: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
-uploadRecording: (callId: string, data: { url: string; sizeBytes?: number; durationSec?: number; mimeType?: string; file?: string }) =>
-     apiClient<{ url: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data }),
+getChatHistory: (callId: string) =>
+     apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>>(`/video-calls/${callId}/chat`),
+  sendChatMessage: (callId: string, data: { message: string; senderName?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }) =>
+     apiClient<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
+  getChatUploadUrl: (callId: string, data: { fileName: string; fileType: string }, tenantId?: string) =>
+     apiClient<{ presignedUrl: string; publicUrl: string; objectName: string }>(`/video-calls/${callId}/chat/upload${tenantId ? `?tenantId=${tenantId}` : ''}`, { method: 'POST', body: data, headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined }),
+  uploadRecording: (callId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }, tenantId?: string) =>
+     apiClient<{ id: string; url: string; presignedUrl: string; objectName: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data, headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined }),
    startRecording: (callId: string) =>
      apiClient<{ recordingId: string; fallbackToScreen?: boolean }>(`/video-calls/${callId}/recordings/start`, { method: 'POST' }),
    stopRecording: (callId: string, recordingId?: string) =>

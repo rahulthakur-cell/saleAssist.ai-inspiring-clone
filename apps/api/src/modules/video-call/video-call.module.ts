@@ -7,9 +7,10 @@ import { PrismaModule } from '../../common/prisma/prisma.module';
 import { RedisModule } from '../../common/redis/redis.module';
 import { AuthModule } from '../auth/auth.module';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
-  imports: [PrismaModule, RedisModule, AuthModule, AnalyticsModule],
+  imports: [PrismaModule, RedisModule, AuthModule, AnalyticsModule, StorageModule],
   controllers: [VideoCallController],
   providers: [VideoCallService, LivekitService, VideoCallGateway],
   exports: [VideoCallService, LivekitService],

@@ -12,27 +12,33 @@ import {
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
 import {
-   Copy,
-   PhoneOff,
-   Save,
-   User,
-   Mail,
-   Phone,
-   FileText,
-   VideoOff,
-   Mic,
-   MicOff,
-   Video,
-   Maximize,
-   Minimize,
-   MessageSquare,
-   Send,
-   X,
-   LayoutGrid,
-   Link2,
-   Hand,
-   Smile,
- } from 'lucide-react';
+  Copy,
+  PhoneOff,
+  Save,
+  User,
+  Mail,
+  Phone,
+  FileText,
+  VideoOff,
+  Mic,
+  MicOff,
+  Video,
+  Maximize,
+  Minimize,
+  MessageSquare,
+  Send,
+  X,
+  LayoutGrid,
+  Link2,
+  Hand,
+  Smile,
+  Share,
+  Paperclip,
+  ScreenShareOff,
+  Camera,
+  Disc2,
+  Unplug,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { videoCallApi } from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
@@ -74,33 +80,33 @@ function useLocalTracks() {
 }
 
 type CallControlsInnerProps = {
-   onToggleRecording: () => void;
-   onToggleChat: () => void;
-   isRecording: boolean;
-   recordingSeconds: number;
-   formatTime: (s: number) => string;
-   onShareCallLink: () => void;
-   inviteUrl?: string;
-   onRaiseHand?: () => void;
-   onSendReaction?: (emoji: string) => void;
-   isHandRaised?: boolean;
- };
+  onToggleRecording: () => void;
+  onToggleChat: () => void;
+  isRecording: boolean;
+  recordingSeconds: number;
+  formatTime: (s: number) => string;
+  onShareCallLink: () => void;
+  inviteUrl?: string;
+  onRaiseHand?: () => void;
+  onSendReaction?: (emoji: string) => void;
+  isHandRaised?: boolean;
+};
 
 function CallControlsInner({
-   onToggleRecording,
-   onToggleChat,
-   isRecording,
-   recordingSeconds,
-   formatTime,
-   onShareCallLink,
-   inviteUrl,
-   onRaiseHand,
-   onSendReaction,
-   isHandRaised,
- }: CallControlsInnerProps) {
-   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
-     useLocalParticipant();
-   const [showReactions, setShowReactions] = useState(false);
+  onToggleRecording,
+  onToggleChat,
+  isRecording,
+  recordingSeconds,
+  formatTime,
+  onShareCallLink,
+  inviteUrl,
+  onRaiseHand,
+  onSendReaction,
+  isHandRaised,
+}: CallControlsInnerProps) {
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
+  const [showReactions, setShowReactions] = useState(false);
 
   const toggleMic = async () => {
     console.log('[Controls] toggleMic clicked', {
@@ -148,7 +154,7 @@ function CallControlsInner({
 
   return (
     <>
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-transparent/70 backdrop-blur-md border border-border/50 px-4 py-2.5 rounded-full">
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-transparent/70 backdrop-blur-md  px-4 py-2.5 rounded-full">
         <button
           onClick={toggleMic}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
@@ -158,7 +164,7 @@ function CallControlsInner({
           ) : (
             <MicOff className="w-4 h-4 text-rose-500" />
           )}
-          {isMicrophoneEnabled ? 'Mute ' : 'Unmute'}
+          {isMicrophoneEnabled ? '' : ''}
         </button>
         <button
           onClick={toggleCamera}
@@ -169,19 +175,29 @@ function CallControlsInner({
           ) : (
             <VideoOff className="w-4 h-4 text-rose-500" />
           )}
-          {isCameraEnabled ? 'Stop Camera' : 'Start Camera'}
+          {isCameraEnabled ? '' : ''}
         </button>
         <button
           onClick={toggleScreenShare}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${isScreenShareEnabled ? 'bg-violet-600 border-violet-500 text-white' : 'bg-zinc-900 border-border hover:border-zinc-700 text-white'}`}
         >
-          <LayoutGrid className="w-4 h-4" />
-          {isScreenShareEnabled ? 'Stop Share' : 'Share Screen'}
+
+          {isScreenShareEnabled ? (
+            < ScreenShareOff className="w-4 h-4" />
+          ) : (
+            < Share className="w-4 h-4" />
+          )}
+          {isScreenShareEnabled ? '' : ''}
         </button>
         <button
           onClick={onToggleRecording}
           className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${isRecording ? 'bg-red-600 border-red-500 text-white' : 'bg-zinc-900 border-border hover:border-zinc-700 text-white'}`}
         >
+          {isRecording ? (
+            <Unplug className="w-4 h-4" />
+          ) : (
+            <Disc2 className="w-4 h-4" />
+          )}
           {isRecording ? 'Stop Rec' : 'Record'}
         </button>
         {isRecording && (
@@ -191,7 +207,7 @@ function CallControlsInner({
           onClick={onToggleChat}
           className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-900 border border-border hover:border-zinc-700 text-white text-xs font-semibold"
         >
-          <MessageSquare className="w-4 h-4" /> Chat
+          <MessageSquare className="w-4 h-4" />
         </button>
         <button
           onClick={onRaiseHand}
@@ -208,13 +224,13 @@ function CallControlsInner({
           >
             <Smile className="w-4 h-4" />
           </button>
-{showReactions && (
-             <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 backdrop-blur-md border border-border/50 px-2 py-1.5 rounded-full">
-               <button onClick={() => { onSendReaction?.('👍'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Thumbs up">👍</button>
-               <button onClick={() => { onSendReaction?.('❤️'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Heart">❤️</button>
-               <button onClick={() => { onSendReaction?.('😂'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Laugh">😂</button>
-             </div>
-           )}
+          {showReactions && (
+            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 backdrop-blur-md border border-border/50 px-2 py-1.5 rounded-full">
+              <button onClick={() => { onSendReaction?.('👍'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Thumbs up">👍</button>
+              <button onClick={() => { onSendReaction?.('❤️'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Heart">❤️</button>
+              <button onClick={() => { onSendReaction?.('😂'); setShowReactions(false); }} className="p-1 hover:scale-125 transition-transform" title="Laugh">😂</button>
+            </div>
+          )}
         </div>
       </div>
       {inviteUrl && (
@@ -243,10 +259,10 @@ export default function VideoCallRoomPage() {
   const router = useRouter();
   const callId = params.callId as string;
 
-  const [token, setToken] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState<string | null>(null);
+  const [token, setToken] = useState < string | null > (null);
+  const [roomName, setRoomName] = useState < string | null > (null);
   const [loading, setLoading] = useState(true);
-  const [liveKitUrl, setLiveKitUrl] = useState<string | null>(null);
+  const [liveKitUrl, setLiveKitUrl] = useState < string | null > (null);
   const [liveKitConfigError, setLiveKitConfigError] = useState('');
   const [inviteUrl, setInviteUrl] = useState('');
   const [visitorName, setVisitorName] = useState('');
@@ -255,19 +271,20 @@ export default function VideoCallRoomPage() {
   const [notes, setNotes] = useState('');
   const [savingNotes, setSavingNotes] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [messages, setMessages] = useState<
-    Array<{ id: string; senderName: string; text: string; createdAt: string }>
-  >([]);
+  const [messages, setMessages] = useState <
+    Array < { id: string; senderName: string; text: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string } >
+  > ([]);
   const [chatInput, setChatInput] = useState('');
+  const fileInputRef = useRef < HTMLInputElement > (null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordingId, setRecordingId] = useState<string | null>(null);
+  const [recordingId, setRecordingId] = useState < string | null > (null);
   const [showChat, setShowChat] = useState(false);
   const isEndingCallRef = useRef(false);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
-  const chatSocketRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordingTimerRef = useRef<number | null>(null);
+  const videoContainerRef = useRef < HTMLDivElement > (null);
+  const chatSocketRef = useRef < any > (null);
+  const mediaRecorderRef = useRef < MediaRecorder | null > (null);
+  const recordingTimerRef = useRef < number | null > (null);
 
   const resolvedLiveKitUrl = normalizeLiveKitUrl(
     liveKitUrl || process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || 'ws://localhost:7880',
@@ -308,7 +325,7 @@ export default function VideoCallRoomPage() {
         try {
           const profile = JSON.parse(profileStr);
           agentName = profile.name || 'Agent';
-        } catch {}
+        } catch { }
       }
 
       const res = await videoCallApi.join(callId, agentName);
@@ -411,50 +428,62 @@ export default function VideoCallRoomPage() {
         if (result?.fallbackToScreen) {
           console.log('[Controls] Falling back to screen recording');
           toast('Server recording unavailable, using browser screen recording');
-          
+
           // Use display media to capture the user's screen
           try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ 
-              video: { displaySurface: 'window' }, 
-              audio: true 
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+              video: { displaySurface: 'window' },
+              audio: true
             });
             const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
               ? 'video/webm;codecs=vp9'
               : MediaRecorder.isTypeSupported('video/webm')
                 ? 'video/webm'
                 : '';
-            
+
             if (!mime) {
               toast.error('MediaRecorder not supported in this browser');
               stream.getTracks().forEach(t => t.stop());
               return;
             }
-            
+
             const recorder = new MediaRecorder(stream, { mimeType: mime });
             const chunks: Blob[] = [];
-            
+
             recorder.ondataavailable = (e) => {
               if (e.data.size > 0) chunks.push(e.data);
             };
-            
+
             recorder.onstop = async () => {
               const blob = new Blob(chunks, { type: mime });
-              const objectUrl = URL.createObjectURL(blob);
+
               try {
-                await videoCallApi.uploadRecording(callId, {
-                  url: objectUrl,
+                // Get presigned URL from backend
+                const { presignedUrl } = await videoCallApi.uploadRecording(callId, {
                   sizeBytes: blob.size,
                   durationSec: recordingSeconds,
                   mimeType: mime,
                 });
-                toast.success('Recording saved');
-              } catch {
-                toast.error('Failed to save recording');
+
+                // Upload blob directly to MinIO
+                const uploadRes = await fetch(presignedUrl, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': mime },
+                  body: blob,
+                });
+
+                if (!uploadRes.ok) {
+                  throw new Error('Failed to upload to MinIO');
+                }
+
+                toast.success('Recording saved successfully to MinIO');
+              } catch (err: any) {
+                toast.error('Failed to save recording: ' + (err?.message || 'Unknown error'));
               }
+
               stream.getTracks().forEach((t) => t.stop());
-              URL.revokeObjectURL(objectUrl);
             };
-            
+
             recorder.start(1000);
             mediaRecorderRef.current = recorder;
             setIsRecording(true);
@@ -505,67 +534,67 @@ export default function VideoCallRoomPage() {
     };
   }, [isRecording]);
 
-const formatTime = (seconds: number) => {
-     const mins = Math.floor(seconds / 60);
-     const secs = seconds % 60;
-     return `${mins}:${secs.toString().padStart(2, '0')}`;
-   };
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
-const [isHandRaised, setIsHandRaised] = useState(false);
-    const reactionSocketRef = useRef<any>(null);
-    const [reactions, setReactions] = useState<Array<{ id: string; emoji: string; participantName: string; timestamp: number }>>([]);
-    const reactionsTimeoutRef = useRef<any>(null);
+  const [isHandRaised, setIsHandRaised] = useState(false);
+  const reactionSocketRef = useRef < any > (null);
+  const [reactions, setReactions] = useState < Array < { id: string; emoji: string; participantName: string; timestamp: number } >> ([]);
+  const reactionsTimeoutRef = useRef < any > (null);
 
-    const handleRaiseHand = async () => {
-      try {
-        if (!reactionSocketRef.current) {
-          reactionSocketRef.current = getSocket('/video', {
-            tenantId: localStorage.getItem('tenantId') || undefined,
-          });
-          reactionSocketRef.current.connect();
-        }
-        reactionSocketRef.current.emit('call:reaction', {
-          callId,
-          emoji: 'raise_hand',
-          participantName: 'You',
+  const handleRaiseHand = async () => {
+    try {
+      if (!reactionSocketRef.current) {
+        reactionSocketRef.current = getSocket('/video', {
+          tenantId: localStorage.getItem('tenantId') || undefined,
         });
-        setIsHandRaised(!isHandRaised);
-        toast.success(isHandRaised ? 'Hand lowered' : 'Hand raised');
-      } catch (err: any) {
-        toast.error(err?.message || 'Failed to raise hand');
+        reactionSocketRef.current.connect();
       }
-    };
+      reactionSocketRef.current.emit('call:reaction', {
+        callId,
+        emoji: 'raise_hand',
+        participantName: 'You',
+      });
+      setIsHandRaised(!isHandRaised);
+      toast.success(isHandRaised ? 'Hand lowered' : 'Hand raised');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to raise hand');
+    }
+  };
 
-    const handleSendReaction = (emoji: string) => {
-      try {
-        if (!reactionSocketRef.current) {
-          reactionSocketRef.current = getSocket('/video', {
-            tenantId: localStorage.getItem('tenantId') || undefined,
-          });
-          reactionSocketRef.current.connect();
-        }
-        reactionSocketRef.current.emit('call:reaction', {
-          callId,
-          emoji,
-          participantName: 'You',
+  const handleSendReaction = (emoji: string) => {
+    try {
+      if (!reactionSocketRef.current) {
+        reactionSocketRef.current = getSocket('/video', {
+          tenantId: localStorage.getItem('tenantId') || undefined,
         });
-      } catch (err: any) {
-        // Silent fail for reactions
+        reactionSocketRef.current.connect();
       }
-    };
+      reactionSocketRef.current.emit('call:reaction', {
+        callId,
+        emoji,
+        participantName: 'You',
+      });
+    } catch (err: any) {
+      // Silent fail for reactions
+    }
+  };
 
-    const handleReactionReceived = (payload: { emoji: string; participantName: string }) => {
-      const reactionId = `${payload.emoji}-${Date.now()}`;
-      setReactions(prev => [...prev, { id: reactionId, emoji: payload.emoji, participantName: payload.participantName, timestamp: Date.now() }]);
-      
-      // Clear reactions after 3 seconds
-      if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
-      reactionsTimeoutRef.current = setTimeout(() => {
-        setReactions([]);
-      }, 3000);
-    };
+  const handleReactionReceived = (payload: { emoji: string; participantName: string }) => {
+    const reactionId = `${payload.emoji}-${Date.now()}`;
+    setReactions(prev => [...prev, { id: reactionId, emoji: payload.emoji, participantName: payload.participantName, timestamp: Date.now() }]);
 
-   const handleChatToggle = () => {
+    // Clear reactions after 3 seconds
+    if (reactionsTimeoutRef.current) clearTimeout(reactionsTimeoutRef.current);
+    reactionsTimeoutRef.current = setTimeout(() => {
+      setReactions([]);
+    }, 3000);
+  };
+
+  const handleChatToggle = () => {
     console.log('[Controls] handleChatToggle clicked', { next: !showChat });
     const next = !showChat;
     setShowChat(next);
@@ -580,24 +609,27 @@ const [isHandRaised, setIsHandRaised] = useState(false);
       });
       chatSocketRef.current = socket;
       socket.on('connect', () => socket.emit('call:join', { callId }));
-socket.on('call:chat:message', (payload: any) => {
-         setMessages((prev) => {
-           if (prev.some((m) => m.id === payload.id)) return prev;
-           return [
-             ...prev,
-             {
-               id: payload.id,
-               senderName: payload.senderName,
-               text: payload.message || payload.text,
-               createdAt: payload.createdAt,
-             },
-           ];
-         });
-       });
-       socket.on('call:reaction', (payload: any) => {
-         handleReactionReceived({ emoji: payload.emoji, participantName: payload.participantName });
-       });
-       socket.connect();
+      socket.on('call:chat:message', (payload: any) => {
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === payload.id)) return prev;
+          return [
+            ...prev,
+            {
+              id: payload.id,
+              senderName: payload.senderName,
+              text: payload.message || payload.text,
+              createdAt: payload.createdAt,
+              attachmentUrl: payload.attachmentUrl,
+              attachmentType: payload.attachmentType,
+              attachmentName: payload.attachmentName,
+            },
+          ];
+        });
+      });
+      socket.on('call:reaction', (payload: any) => {
+        handleReactionReceived({ emoji: payload.emoji, participantName: payload.participantName });
+      });
+      socket.connect();
     } catch (err: any) {
       toast.error(err?.message || 'Failed to join chat');
       setShowChat(false);
@@ -614,7 +646,7 @@ socket.on('call:chat:message', (payload: any) => {
         try {
           const profile = JSON.parse(profileStr);
           senderName = profile.name || 'Agent';
-        } catch {}
+        } catch { }
       }
       const saved = await videoCallApi.sendChatMessage(callId, { message: text, senderName });
       setMessages((prev) => {
@@ -626,6 +658,9 @@ socket.on('call:chat:message', (payload: any) => {
             senderName: saved.senderName,
             text: saved.message,
             createdAt: saved.createdAt,
+            attachmentUrl: saved.attachmentUrl,
+            attachmentType: saved.attachmentType,
+            attachmentName: saved.attachmentName,
           },
         ];
       });
@@ -633,6 +668,93 @@ socket.on('call:chat:message', (payload: any) => {
     } catch (err: any) {
       console.error('[Chat] Send message failed:', err);
       toast.error(err?.message || 'Failed to send message');
+    }
+  };
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      const profileStr = localStorage.getItem('user');
+      let senderName = 'Agent';
+      if (profileStr) {
+        try {
+          const profile = JSON.parse(profileStr);
+          senderName = profile.name || 'Agent';
+        } catch { }
+      }
+
+      const { presignedUrl, publicUrl } = await videoCallApi.getChatUploadUrl(callId, {
+        fileName: file.name,
+        fileType: file.type,
+      }, localStorage.getItem('tenantId') || undefined);
+
+      const uploadRes = await fetch(presignedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file');
+      }
+
+      const saved = await videoCallApi.sendChatMessage(callId, {
+        message: file.name,
+        senderName,
+        attachmentUrl: publicUrl,
+        attachmentType: file.type,
+        attachmentName: file.name,
+      });
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === saved.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: saved.id,
+            senderName: saved.senderName,
+            text: saved.message,
+            createdAt: saved.createdAt,
+            attachmentUrl: saved.attachmentUrl,
+            attachmentType: saved.attachmentType,
+            attachmentName: saved.attachmentName,
+          },
+        ];
+      });
+      toast.success('File attached successfully');
+    } catch (err: any) {
+      console.error('[Chat] File upload failed:', err);
+      toast.error(err?.message || 'Failed to upload file');
+    }
+  };
+
+  const handleScreenshot = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'screen' },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      const imageBlob = await new Promise < Blob > ((resolve) => {
+        const canvas = document.createElement('canvas');
+        const video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d')?.drawImage(video, 0, 0);
+          canvas.toBlob((blob) => {
+            stream.getTracks().forEach((t) => t.stop());
+            if (blob) resolve(blob);
+          }, 'image/png');
+        };
+      });
+
+      const file = new File([imageBlob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
+      await handleFileUpload(file);
+    } catch (err: any) {
+      if (err?.name !== 'NotAllowedError') {
+        toast.error(err?.message || 'Failed to capture screenshot');
+      }
     }
   };
 
@@ -765,7 +887,26 @@ socket.on('call:chat:message', (payload: any) => {
                   className="max-w-[80%] rounded-2xl bg-white/10 px-3 py-2 text-white"
                 >
                   <div className="text-[10px] text-white/60">{item.senderName}</div>
-                  <div className="text-sm">{item.text}</div>
+                  {item.attachmentUrl ? (
+                    item.attachmentType?.startsWith('image/') ? (
+                      <img
+                        src={item.attachmentUrl}
+                        alt={item.attachmentName || 'Attachment'}
+                        className="max-w-full max-h-48 rounded-lg mt-1"
+                      />
+                    ) : (
+                      <a
+                        href={item.attachmentUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-violet-400 text-sm underline mt-1 block"
+                      >
+                        {item.attachmentName || item.text}
+                      </a>
+                    )
+                  ) : (
+                    <div className="text-sm">{item.text}</div>
+                  )}
                 </div>
               ))}
               {messages.length === 0 && (
@@ -779,19 +920,50 @@ socket.on('call:chat:message', (payload: any) => {
               }}
               className="p-3 border-t border-white/10"
             >
-              <input
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type a message..."
-                className="w-full rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60"
-              />
-              <button
-                type="submit"
-                disabled={!chatInput.trim()}
-                className="mt-2 w-full py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold"
-              >
-                Send
-              </button>
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf,.doc,.docx,.txt,.csv"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20"
+                  title="Attach file"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleScreenshot}
+                  className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white text-sm font-semibold hover:bg-white/20"
+                  title="Take screenshot"
+                >
+                  <Camera className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex gap-2 mt-2">
+                <input
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1 rounded-lg bg-white/10 border border-white/20 px-3 py-2 text-sm text-white placeholder:text-white/60"
+                />
+                <button
+                  type="submit"
+                  disabled={!chatInput.trim()}
+                  className="px-4 py-2 rounded-lg bg-violet-600 disabled:opacity-50 text-white text-sm font-semibold"
+                >
+                  Send
+                </button>
+              </div>
             </form>
           </div>
         )}
@@ -912,151 +1084,171 @@ socket.on('call:chat:message', (payload: any) => {
 }
 
 function VideoLayout() {
-   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
-   const localScreen = tracks.find(
-     (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare,
-   );
-   const localCameras = tracks.filter(
-     (t) => t.participant.isLocal && t.source === Track.Source.Camera,
-   );
-   const localCamera = localCameras[0];
+  const localScreen = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare,
+  );
+  const localCameras = tracks.filter(
+    (t) => t.participant.isLocal && t.source === Track.Source.Camera,
+  );
+  const localCamera = localCameras[0];
 
-   // Get all remote screen shares
-   const remoteScreens = tracks.filter(
-     (t) => !t.participant.isLocal && t.source === Track.Source.ScreenShare,
-   );
+  // Get all remote screen shares
+  const remoteScreens = tracks.filter(
+    (t) => !t.participant.isLocal && t.source === Track.Source.ScreenShare,
+  );
 
-// Get all unique remote participant identities (from camera OR screen share)
-    const allRemoteParticipants = Array.from(
-      new Set(
-        tracks
-          .filter((t) => !t.participant.isLocal && (t.source === Track.Source.Camera || t.source === Track.Source.ScreenShare))
-          .map((t) => t.participant.identity),
-      ),
+  // Get all unique remote participant identities (from camera OR screen share)
+  const allRemoteParticipants = Array.from(
+    new Set(
+      tracks
+        .filter((t) => !t.participant.isLocal && (t.source === Track.Source.Camera || t.source === Track.Source.ScreenShare))
+        .map((t) => t.participant.identity),
+    ),
+  );
+
+  const anyoneScreenSharing = Boolean(
+    localScreen || remoteScreens.length > 0,
+  );
+
+  // Get the primary screen share (first remote or local)
+  const screenTrackRef = localScreen || (remoteScreens.length > 0 ? remoteScreens[0] : undefined);
+  const screenParticipantName = screenTrackRef?.participant?.name || screenTrackRef?.participant?.identity || 'Screen';
+
+  // Track which identity is shown in main screen area to avoid duplicates
+  const mainScreenIdentity = screenTrackRef?.participant?.identity;
+
+  // Get camera track for a participant
+  const getCameraTrack = (participantIdentity: string) => {
+    return tracks.find(
+      (t) =>
+        !t.participant.isLocal &&
+        t.participant.identity === participantIdentity &&
+        t.source === Track.Source.Camera,
     );
+  };
 
-const anyoneScreenSharing = Boolean(
-      localScreen || remoteScreens.length > 0,
-    );
+  const visibleParticipantIds: Array<string | 'local'> = [
+    ...allRemoteParticipants,
+    ...(localCamera ? ['local'] : []),
+  ];
 
-    // Get the primary screen share (first remote or local)
-    const screenTrackRef = localScreen || (remoteScreens.length > 0 ? remoteScreens[0] : undefined);
-    const screenParticipantName = screenTrackRef?.participant?.name || screenTrackRef?.participant?.identity || 'Screen';
+  // Get additional screen shares (not the primary one, for small tiles)
+  const additionalScreenShares = remoteScreens.filter(
+    (t) => t.participant.identity !== mainScreenIdentity,
+  );
 
-    // Track which identity is shown in main screen area to avoid duplicates
-    const mainScreenIdentity = screenTrackRef?.participant?.identity;
-
-    // Get camera track for a participant
-    const getCameraTrack = (participantIdentity: string) => {
-      return tracks.find(
-        (t) =>
-          !t.participant.isLocal &&
-          t.participant.identity === participantIdentity &&
-          t.source === Track.Source.Camera,
-      );
-    };
-
-    const visibleParticipantIds: Array<string | 'local'> = [
-      ...allRemoteParticipants,
-      ...(localCamera ? ['local'] : []),
-    ];
-
-    // Get additional screen shares (not the primary one, for small tiles)
-    const additionalScreenShares = remoteScreens.filter(
-      (t) => t.participant.identity !== mainScreenIdentity,
-    );
-
-return (
-       <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
-        {tracks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center space-y-4 text-center">
-            <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
-              <VideoOff className="w-10 h-10 text-zinc-500" />
-            </div>
-            <div>
-              <p className="text-zinc-400 font-medium">Waiting for video...</p>
-              <p className="text-zinc-500 text-sm mt-1">
-                Please allow camera access to see your video
-              </p>
-            </div>
+  return (
+    <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
+      {tracks.length === 0 ? (
+        <div className="flex flex-col items-center justify-center space-y-4 text-center">
+          <div className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center">
+            <VideoOff className="w-10 h-10 text-zinc-500" />
           </div>
-        ) : (
-          <div className="flex gap-4 w-full h-full">
-            {anyoneScreenSharing && screenTrackRef && (
-              <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative">
-                <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                  {localScreen ? 'You (Screen)' : `${screenParticipantName} (Screen)`}
-                </div>
-                <ParticipantTile trackRef={screenTrackRef} className="w-full h-full" />
-              </div>
-            )}
-            <div
-              className={`${anyoneScreenSharing ? 'flex flex-col gap-3' : 'grid gap-4 w-full h-full max-w-4xl grid-cols-1 md:grid-cols-2'}`}
-            >
-              {visibleParticipantIds.map((identityOrLocal) => {
-                const participantId = identityOrLocal === 'local' ? undefined : identityOrLocal;
-                const isLocal = identityOrLocal === 'local';
-                const cameraRef = isLocal
-                  ? localCamera
-                  : participantId
-                    ? getCameraTrack(participantId)
-                    : null;
-
-                // If no camera, check if they have a screen share to show as fallback
-                const screenRef = !isLocal && participantId && !cameraRef
-                  ? tracks.find((t) => !t.participant.isLocal && t.participant.identity === participantId && t.source === Track.Source.ScreenShare)
+          <div>
+            <p className="text-zinc-400 font-medium">Waiting for video...</p>
+            <p className="text-zinc-500 text-sm mt-1">
+              Please allow camera access to see your video
+            </p>
+          </div>
+        </div>
+      ) : anyoneScreenSharing ? (
+        // Screen sharing layout: main screen + small camera thumbnails
+        <div className="flex flex-col lg:flex-row gap-4 w-full h-full">
+          <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative min-h-0">
+            <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+              {localScreen ? 'You (Screen)' : `${screenParticipantName} (Screen)`}
+            </div>
+            <ParticipantTile trackRef={screenTrackRef} className="w-full h-full" />
+          </div>
+          <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto lg:w-52">
+            {visibleParticipantIds.map((identityOrLocal) => {
+              const participantId = identityOrLocal === 'local' ? undefined : identityOrLocal;
+              const isLocal = identityOrLocal === 'local';
+              const cameraRef = isLocal
+                ? localCamera
+                : participantId
+                  ? getCameraTrack(participantId)
                   : null;
 
-                // Skip screen-only in grid if they're the main screen sharer (already shown large)
-                if (mainScreenIdentity && participantId === mainScreenIdentity && screenRef && !cameraRef) return null;
+              // If no camera, check if they have a screen share to show as fallback
+              const screenRef = !isLocal && participantId && !cameraRef
+                ? tracks.find((t) => !t.participant.isLocal && t.participant.identity === participantId && t.source === Track.Source.ScreenShare)
+                : null;
 
-                // Skip if no camera and no screen at all
-                if (!cameraRef && !screenRef) return null;
+              // Skip screen-only in grid if they're the main screen sharer (already shown large)
+              if (mainScreenIdentity && participantId === mainScreenIdentity && screenRef && !cameraRef) return null;
 
-                // Use whichever is available - camera takes precedence in grid
-                const displayRef = cameraRef ?? screenRef;
-                const participant = displayRef!.participant;
-                const isShowingScreenAsVideo = screenRef && !cameraRef;
+              // Skip if no camera and no screen at all
+              if (!cameraRef && !screenRef) return null;
 
-                return (
-                  <div
-                    key={participant.identity + (isShowingScreenAsVideo ? '-screen' : '')}
-                    className="relative rounded-xl overflow-hidden bg-zinc-900"
-                    style={
-                      !anyoneScreenSharing ? { width: '100%' } : { width: '180px', height: '120px' }
-                    }
-                  >
-                    <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                      {participant.isLocal ? 'You' : (participant.name || participant.identity) + (isShowingScreenAsVideo ? ' (Screen)' : '')}
-                    </div>
-                    <ParticipantTile
-                      trackRef={displayRef as any}
-                      style={
-                        !anyoneScreenSharing
-                          ? {}
-                          : { width: '100%', height: '100%', objectFit: 'cover' }
-                      }
-                    />
-                  </div>
-                );
-              })}
-              {/* Show additional screen shares as small tiles (when multiple people screen sharing) */}
-              {anyoneScreenSharing && additionalScreenShares.map((screen) => (
+              // Use whichever is available - camera takes precedence in grid
+              const displayRef = cameraRef ?? screenRef;
+              const participant = displayRef!.participant;
+              const isShowingScreenAsVideo = screenRef && !cameraRef;
+
+              // Skip additional screen shares already shown below
+              if (isShowingScreenAsVideo && additionalScreenShares.some(s => s.participant.identity === participantId)) return null;
+
+              return (
                 <div
-                  key={screen.participant.identity + '-additional-screen'}
-                  className="relative rounded-xl overflow-hidden bg-zinc-900"
-                  style={{ width: '180px', height: '120px' }}
+                  key={participant.identity + (isShowingScreenAsVideo ? '-screen' : '')}
+                  className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
+                  style={{ maxWidth: '200px', maxHeight: '150px' }}
                 >
-                  <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-                    {(screen.participant.name || screen.participant.identity) + ' (Screen)'}
+                  <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
+                    {participant.isLocal ? 'You' : (participant.name || participant.identity) + (isShowingScreenAsVideo ? ' (Screen)' : '')}
                   </div>
-                  <ParticipantTile trackRef={screen as any} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <ParticipantTile
+                    trackRef={displayRef as any}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 </div>
-              ))}
-            </div>
+              );
+            })}
+            {/* Show additional screen shares as small tiles (when multiple people screen sharing) */}
+            {additionalScreenShares.map((screen) => (
+              <div
+                key={screen.participant.identity + '-additional-screen'}
+                className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
+                style={{ maxWidth: '200px', maxHeight: '150px' }}
+              >
+                <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
+                  {(screen.participant.name || screen.participant.identity) + ' (Screen)'}
+                </div>
+                <ParticipantTile trackRef={screen as any} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-    );
-  }
+        </div>
+      ) : (
+        // Regular grid layout for camera-only calls
+        <div className="grid gap-4 w-full h-full max-w-6xl grid-cols-1 md:grid-cols-2">
+          {localCameras.map((trackRef) => (
+            <div
+              key={trackRef.participant.identity}
+              className="relative rounded-xl overflow-hidden bg-zinc-900"
+            >
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
+                You
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+          {remoteScreens.map((trackRef) => (
+            <div
+              key={trackRef.participant.identity}
+              className="relative rounded-xl overflow-hidden bg-zinc-900"
+            >
+              <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-zinc-700/90 text-white text-xs font-semibold">
+                {trackRef.participant.name || trackRef.participant.identity}
+              </div>
+              <ParticipantTile trackRef={trackRef} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
