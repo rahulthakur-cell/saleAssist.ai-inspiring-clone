@@ -65,6 +65,9 @@ export class StorageService implements OnModuleInit {
    * Generates a presigned upload URL for direct browser S3 uploads.
    */
   async getPresignedUploadUrl(objectName: string, expirySeconds = 3600): Promise<string> {
+    if (!this.minioClient) {
+      throw new Error('Storage service is not configured. MinIO client failed to initialize.');
+    }
     return this.minioClient.presignedPutObject(this.bucketName, objectName, expirySeconds);
   }
 
