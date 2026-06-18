@@ -239,7 +239,7 @@ function CustomerJoinCallInner() {
     }
   };
 
-  const handleChatToggle = () => {
+  const handleChatToggle = async () => {
     console.log('[Guest Chat] handleChatToggle clicked', { next: !showChat });
     const next = !showChat;
     setShowChat(next);
@@ -247,6 +247,24 @@ function CustomerJoinCallInner() {
       chatSocketRef.current?.disconnect();
       chatSocketRef.current = null;
       return;
+    }
+    try {
+      const history = await videoCallApi.getChatHistory(callId, tenantId);
+      if (history) {
+        setMessages(
+          history.map((m: any) => ({
+            id: m.id,
+            senderName: m.senderName,
+            text: m.message || m.text,
+            createdAt: m.createdAt,
+            attachmentUrl: m.attachmentUrl,
+            attachmentType: m.attachmentType,
+            attachmentName: m.attachmentName,
+          })),
+        );
+      }
+    } catch (err) {
+      console.error('[Guest Chat] Failed to load chat history:', err);
     }
     try {
       const socket = getSocket('/video', { tenantId });
@@ -567,6 +585,11 @@ const handleSendMessage = async () => {
                   : JSON.stringify(err);
             if (message.includes('Client initiated disconnect')) {
               console.debug('[LiveKit] Client initiated disconnect');
+              return;
+            }
+            if (message.includes('Requested device not found') || message.includes('NotFoundError')) {
+              toast.warning('Camera or microphone not found. You may join as audio-only or view-only.');
+              console.warn('[LiveKit] Device not found:', err);
               return;
             }
             console.error('[LiveKit] Guest connection error:', err);

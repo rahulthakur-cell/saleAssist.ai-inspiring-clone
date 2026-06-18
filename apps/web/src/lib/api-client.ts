@@ -188,8 +188,8 @@ export const videoCallApi = {
   getConfig: () => apiClient<{ liveKitUrl: string }>('/video-calls/livekit-config'),
   list: (limit = 20, page = 1) => apiClient<any>(`/video-calls?limit=${limit}&page=${page}`),
   getQueue: () => apiClient<{ waitingCount: number }>('/video-calls/queue'),
-getChatHistory: (callId: string) =>
-     apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>>(`/video-calls/${callId}/chat`),
+getChatHistory: (callId: string, tenantId?: string) =>
+     apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>>(`/video-calls/${callId}/chat${tenantId ? `?tenantId=${tenantId}` : ''}`),
   sendChatMessage: (callId: string, data: { message: string; senderName?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }) =>
      apiClient<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
   getChatUploadUrl: (callId: string, data: { fileName: string; fileType: string }, tenantId?: string) =>

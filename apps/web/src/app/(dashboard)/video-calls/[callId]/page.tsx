@@ -594,7 +594,7 @@ export default function VideoCallRoomPage() {
     }, 3000);
   };
 
-  const handleChatToggle = () => {
+  const handleChatToggle = async () => {
     console.log('[Controls] handleChatToggle clicked', { next: !showChat });
     const next = !showChat;
     setShowChat(next);
@@ -602,6 +602,25 @@ export default function VideoCallRoomPage() {
       chatSocketRef.current?.disconnect();
       chatSocketRef.current = null;
       return;
+    }
+    try {
+      const tenantId = localStorage.getItem('tenantId') || undefined;
+      const history = await videoCallApi.getChatHistory(callId, tenantId);
+      if (history) {
+        setMessages(
+          history.map((m: any) => ({
+            id: m.id,
+            senderName: m.senderName,
+            text: m.message || m.text,
+            createdAt: m.createdAt,
+            attachmentUrl: m.attachmentUrl,
+            attachmentType: m.attachmentType,
+            attachmentName: m.attachmentName,
+          })),
+        );
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to load chat history:', err);
     }
     try {
       const socket = getSocket('/video', {
@@ -752,7 +771,9 @@ export default function VideoCallRoomPage() {
       const file = new File([imageBlob], `screenshot-${Date.now()}.png`, { type: 'image/png' });
       await handleFileUpload(file);
     } catch (err: any) {
-      if (err?.name !== 'NotAllowedError') {
+      if (err?.name === 'NotFoundError') {
+        toast.error('Screen capture device not found. Please ensure screen sharing is supported by your browser/device.');
+      } else if (err?.name !== 'NotAllowedError') {
         toast.error(err?.message || 'Failed to capture screenshot');
       }
     }
@@ -817,6 +838,11 @@ export default function VideoCallRoomPage() {
                   : JSON.stringify(err);
             if (message.includes('Client initiated disconnect')) {
               console.debug('[LiveKit] Client initiated disconnect');
+              return;
+            }
+            if (message.includes('Requested device not found') || message.includes('NotFoundError')) {
+              toast.warning('Camera or microphone not found. You may join as audio-only or view-only.');
+              console.warn('[LiveKit] Device not found:', err);
               return;
             }
             console.error('[LiveKit] Connection error:', err);

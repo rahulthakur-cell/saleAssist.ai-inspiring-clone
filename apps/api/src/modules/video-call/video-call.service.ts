@@ -27,8 +27,19 @@ export class VideoCallService {
     if (!fs.existsSync(this.uploadDir)) fs.mkdirSync(this.uploadDir, { recursive: true });
   }
 
-  async getChatHistory(callId: string, tenantId: string) {
-    await this.prisma.setTenantContext(tenantId);
+  async getChatHistory(callId: string, tenantId?: string) {
+    let effectiveTenantId = tenantId;
+    if (!effectiveTenantId) {
+      const call = await this.prisma.videoCall.findUnique({
+        where: { id: callId },
+        select: { tenantId: true },
+      });
+      effectiveTenantId = call?.tenantId;
+    }
+    if (!effectiveTenantId) {
+      throw new NotFoundException('Video call not found');
+    }
+    await this.prisma.setTenantContext(effectiveTenantId);
     const messages = await this.prisma.videoCallChatMessage.findMany({
       where: { videoCallId: callId },
       orderBy: { createdAt: 'asc' },
@@ -36,8 +47,19 @@ export class VideoCallService {
     return messages;
   }
 
-  async sendChatMessage(callId: string, tenantId: string, data: { message: string; senderName: string; senderId?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }) {
-    await this.prisma.setTenantContext(tenantId);
+  async sendChatMessage(callId: string, data: { message: string; senderName: string; senderId?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }, tenantId?: string) {
+    let effectiveTenantId = tenantId;
+    if (!effectiveTenantId) {
+      const call = await this.prisma.videoCall.findUnique({
+        where: { id: callId },
+        select: { tenantId: true },
+      });
+      effectiveTenantId = call?.tenantId;
+    }
+    if (!effectiveTenantId) {
+      throw new NotFoundException('Video call not found');
+    }
+    await this.prisma.setTenantContext(effectiveTenantId);
     this.logger.debug(`sendChatMessage start callId=${callId} tenantId=${tenantId} payload=${JSON.stringify({ message: data.message, senderName: data.senderName, senderId: data.senderId })}`);
     let message;
     try {

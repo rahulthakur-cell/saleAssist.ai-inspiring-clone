@@ -104,7 +104,7 @@ export class VideoCallController {
   @Get(':id/chat')
   @Public()
   @ApiOperation({ summary: 'Get video call chat history' })
-  async getChat(@Param('id') callId: string, @TenantId() tenantId: string): Promise<any> {
+  async getChat(@Param('id') callId: string, @TenantId() tenantId?: string): Promise<any> {
     return this.videoCallService.getChatHistory(callId, tenantId);
   }
 
@@ -113,12 +113,12 @@ export class VideoCallController {
   @ApiOperation({ summary: 'Send a video call chat message' })
   async sendChat(
     @Param('id') callId: string,
-    @TenantId() tenantId: string,
     @Body() dto: { message: string; senderName: string; senderId?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string },
+    @TenantId() tenantId?: string,
   ): Promise<any> {
     console.log('[sendChat] hit', { callId, tenantId, dto });
     try {
-      const result = await this.videoCallService.sendChatMessage(callId, tenantId, dto);
+      const result = await this.videoCallService.sendChatMessage(callId, dto, tenantId);
       const ioServer = VideoCallGateway.serverInstance || this.videoCallGateway?.server;
       if (ioServer) {
         ioServer.to(`call:${callId}`).emit('call:chat:message', {
