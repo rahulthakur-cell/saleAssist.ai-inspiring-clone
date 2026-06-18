@@ -47,6 +47,9 @@ export class VideoCallService {
           senderId: data.senderId,
           senderName: data.senderName,
           message: data.message,
+          attachmentUrl: data.attachmentUrl,
+          attachmentType: data.attachmentType,
+          attachmentName: data.attachmentName,
         } as any,
       });
     } catch (err: any) {
@@ -54,7 +57,7 @@ export class VideoCallService {
       throw err;
     }
     this.logger.debug(`sendChatMessage success callId=${callId} id=${message.id}`);
-    return { ...message, attachmentUrl: (message as any).attachmentUrl || null, attachmentType: (message as any).attachmentType || null, attachmentName: (message as any).attachmentName || null };
+    return message;
   }
 
   async getChatAttachmentUploadUrl(callId: string, tenantId: string, data: { fileName: string; fileType: string }) {

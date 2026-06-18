@@ -119,17 +119,22 @@ export class VideoCallController {
     console.log('[sendChat] hit', { callId, tenantId, dto });
     try {
       const result = await this.videoCallService.sendChatMessage(callId, tenantId, dto);
-      this.videoCallGateway.server.to(`call:${callId}`).emit('call:chat:message', {
-        id: result.id,
-        callId: result.videoCallId,
-        message: result.message,
-        senderId: result.senderId || dto.senderId,
-        senderName: result.senderName,
-        createdAt: result.createdAt.toISOString(),
-        attachmentUrl: result.attachmentUrl,
-        attachmentType: result.attachmentType,
-        attachmentName: result.attachmentName,
-      });
+      const ioServer = VideoCallGateway.serverInstance || this.videoCallGateway?.server;
+      if (ioServer) {
+        ioServer.to(`call:${callId}`).emit('call:chat:message', {
+          id: result.id,
+          callId: result.videoCallId,
+          message: result.message,
+          senderId: result.senderId || dto.senderId,
+          senderName: result.senderName,
+          createdAt: result.createdAt.toISOString(),
+          attachmentUrl: result.attachmentUrl,
+          attachmentType: result.attachmentType,
+          attachmentName: result.attachmentName,
+        });
+      } else {
+        console.warn('[sendChat] WebSocket server not initialized yet');
+      }
       return result;
     } catch (err) {
       console.log('[sendChat] error', err instanceof Error ? err.message : err);

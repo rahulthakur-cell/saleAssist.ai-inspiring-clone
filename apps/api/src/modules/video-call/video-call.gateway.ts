@@ -4,6 +4,7 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
@@ -21,11 +22,18 @@ import { VideoCallStatus } from '@saleassist/database';
   },
   namespace: '/video',
 })
-export class VideoCallGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class VideoCallGateway implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit {
   private readonly logger = new Logger(VideoCallGateway.name);
 
   @WebSocketServer()
   server!: Server;
+
+  static serverInstance: Server | null = null;
+
+  afterInit(server: Server) {
+    VideoCallGateway.serverInstance = server;
+    this.logger.log('WebSocket Gateway initialized');
+  }
 
   constructor(
     private readonly jwtService: JwtService,
