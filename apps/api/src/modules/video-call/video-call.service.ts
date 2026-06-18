@@ -47,12 +47,19 @@ export class VideoCallService {
           senderId: data.senderId,
           senderName: data.senderName,
           message: data.message,
-          attachmentUrl: data.attachmentUrl,
-          attachmentType: data.attachmentType,
-          attachmentName: data.attachmentName,
         },
-      });
-    } catch (err) {
+      } as any);
+      if (data.attachmentUrl && data.attachmentUrl !== message.attachmentUrl) {
+        message = await this.prisma.videoCallChatMessage.update({
+          where: { id: message.id },
+          data: {
+            attachmentUrl: data.attachmentUrl,
+            attachmentType: data.attachmentType,
+            attachmentName: data.attachmentName,
+          },
+        } as any);
+      }
+    } catch (err: any) {
       this.logger.error(`sendChatMessage prisma error callId=${callId} err=${err instanceof Error ? err.message : JSON.stringify(err)}`);
       throw err;
     }
