@@ -61,20 +61,24 @@ export class VideoCallService {
   }
 
   async getChatAttachmentUploadUrl(callId: string, tenantId: string, data: { fileName: string; fileType: string }) {
-    await this.prisma.setTenantContext(tenantId);
-    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
-    if (!call) throw new NotFoundException('Video call not found');
+    try {
+      await this.prisma.setTenantContext(tenantId);
+      const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+      if (!call) {
+        this.logger.error(`Video call not found: callId=${callId} tenantId=${tenantId}`);
+        throw new NotFoundException('Video call not found');
+      }
 
-    const ext = data.fileName.split('.').pop() || '';
-    const objectName = `chat-attachments/${callId}-${nanoid(8)}.${ext}`;
-    const minioEndpoint = this.configService.get<string>('MINIO_ENDPOINT', 'localhost');
-    const minioPort = this.configService.get<string>('MINIO_PORT', '9000');
-    const minioUseSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
-    const protocol = minioUseSSL ? 'https' : 'http';
-    const publicUrl = `${protocol}://${minioEndpoint}:${minioPort}/saleassist/${objectName}`;
-    const presignedUrl = await this.storage.getPresignedUploadUrl(objectName);
+      const ext = data.fileName.split('.').pop() || '';
+      const objectName = `chat-attachments/${callId}-${nanoid(8)}.${ext}`;
+      const publicUrl = this.storage.getPublicUrl(objectName);
+      const presignedUrl = await this.storage.getPresignedUploadUrl(objectName);
 
-    return { presignedUrl, publicUrl, objectName };
+      return { presignedUrl, publicUrl, objectName };
+    } catch (err: any) {
+      this.logger.error(`getChatAttachmentUploadUrl error: ${err.message}`, err.stack);
+      throw err;
+    }
   }
 
   async attachRecording(callId: string, tenantId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }) {
