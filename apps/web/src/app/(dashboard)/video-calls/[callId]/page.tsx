@@ -1112,58 +1112,57 @@ export default function VideoCallRoomPage() {
 function VideoLayout() {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
+  const localCamera = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.Camera,
+  );
   const localScreen = tracks.find(
     (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare,
   );
-  const localCameras = tracks.filter(
-    (t) => t.participant.isLocal && t.source === Track.Source.Camera,
-  );
-  const localCamera = localCameras[0];
-
-  // Get all remote screen shares
   const remoteScreens = tracks.filter(
     (t) => !t.participant.isLocal && t.source === Track.Source.ScreenShare,
   );
+  const remoteCameras = tracks.filter(
+    (t) => !t.participant.isLocal && t.source === Track.Source.Camera,
+  );
+  const primaryScreen = remoteScreens[0] ?? localScreen;
+  const anyoneSharingScreen = Boolean(primaryScreen);
 
-  // Get all unique remote participant identities (from camera OR screen share)
-  const allRemoteParticipants = Array.from(
-    new Set(
-      tracks
-        .filter((t) => !t.participant.isLocal && (t.source === Track.Source.Camera || t.source === Track.Source.ScreenShare))
-        .map((t) => t.participant.identity),
-    ),
+  const remoteParticipantIdentities = Array.from(
+    new Set([
+      ...remoteScreens.map((t) => t.participant.identity),
+      ...remoteCameras.map((t) => t.participant.identity),
+    ]),
   );
 
-  const anyoneScreenSharing = Boolean(
-    localScreen || remoteScreens.length > 0,
-  );
+  const screenParticipantName = primaryScreen?.participant?.name || primaryScreen?.participant?.identity || 'Screen';
 
-  // Get the primary screen share (first remote or local)
-  const screenTrackRef = localScreen || (remoteScreens.length > 0 ? remoteScreens[0] : undefined);
-  const screenParticipantName = screenTrackRef?.participant?.name || screenTrackRef?.participant?.identity || 'Screen';
+  type Thumbnail = { participant: any; trackRef: any; isScreen: boolean };
+  const thumbnails: Thumbnail[] = remoteParticipantIdentities
+    .map((participantIdentity) => {
+      const screenRef = remoteScreens.find((t) => t.participant.identity === participantIdentity);
+      const cameraRef = remoteCameras.find((t) => t.participant.identity === participantIdentity);
+      const isPrimaryScreenParticipant = screenRef && primaryScreen?.participant.identity === screenRef.participant.identity;
 
-  // Track which identity is shown in main screen area to avoid duplicates
-  const mainScreenIdentity = screenTrackRef?.participant?.identity;
+      if (isPrimaryScreenParticipant) return null;
 
-  // Get camera track for a participant
-  const getCameraTrack = (participantIdentity: string) => {
-    return tracks.find(
-      (t) =>
-        !t.participant.isLocal &&
-        t.participant.identity === participantIdentity &&
-        t.source === Track.Source.Camera,
-    );
-  };
+      const displayRef = screenRef ?? cameraRef;
+      if (!displayRef) return null;
 
-  const visibleParticipantIds: Array<string | 'local'> = [
-    ...allRemoteParticipants,
-    ...(localCamera ? ['local'] : []),
-  ];
+      return {
+        participant: displayRef.participant,
+        trackRef: displayRef,
+        isScreen: Boolean(screenRef),
+      };
+    })
+    .filter((thumbnail): thumbnail is Thumbnail => Boolean(thumbnail));
 
-  // Get additional screen shares (not the primary one, for small tiles)
-  const additionalScreenShares = remoteScreens.filter(
-    (t) => t.participant.identity !== mainScreenIdentity,
-  );
+  if (localCamera && !localScreen) {
+    thumbnails.push({ participant: localCamera.participant, trackRef: localCamera, isScreen: false });
+  }
+
+  if (localScreen && primaryScreen?.participant.identity !== localScreen.participant.identity) {
+    thumbnails.push({ participant: localScreen.participant, trackRef: localScreen, isScreen: true });
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto">
@@ -1179,90 +1178,44 @@ function VideoLayout() {
             </p>
           </div>
         </div>
-      ) : anyoneScreenSharing ? (
-        // Screen sharing layout: main screen + small camera thumbnails
+      ) : anyoneSharingScreen ? (
         <div className="flex flex-col lg:flex-row gap-4 w-full h-full">
           <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative min-h-0">
             <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-              {localScreen ? 'You (Screen)' : `${screenParticipantName} (Screen)`}
+              {primaryScreen?.participant.isLocal ? 'You (Screen)' : `${screenParticipantName} (Screen)`}
             </div>
-            <ParticipantTile trackRef={screenTrackRef} className="w-full h-full" />
+            <ParticipantTile trackRef={primaryScreen} className="w-full h-full" />
           </div>
           <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto lg:w-52">
-            {visibleParticipantIds.map((identityOrLocal) => {
-              const participantId = identityOrLocal === 'local' ? undefined : identityOrLocal;
-              const isLocal = identityOrLocal === 'local';
-              const cameraRef = isLocal
-                ? localCamera
-                : participantId
-                  ? getCameraTrack(participantId)
-                  : null;
-
-              // If no camera, check if they have a screen share to show as fallback
-              const screenRef = !isLocal && participantId && !cameraRef
-                ? tracks.find((t) => !t.participant.isLocal && t.participant.identity === participantId && t.source === Track.Source.ScreenShare)
-                : null;
-
-              // Skip screen-only in grid if they're the main screen sharer (already shown large)
-              if (mainScreenIdentity && participantId === mainScreenIdentity && screenRef && !cameraRef) return null;
-
-              // Skip if no camera and no screen at all
-              if (!cameraRef && !screenRef) return null;
-
-              // Use whichever is available - camera takes precedence in grid
-              const displayRef = cameraRef ?? screenRef;
-              const participant = displayRef!.participant;
-              const isShowingScreenAsVideo = screenRef && !cameraRef;
-
-              // Skip additional screen shares already shown below
-              if (isShowingScreenAsVideo && additionalScreenShares.some(s => s.participant.identity === participantId)) return null;
-
-              return (
-                <div
-                  key={participant.identity + (isShowingScreenAsVideo ? '-screen' : '')}
-                  className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
-                  style={{ maxWidth: '200px', maxHeight: '150px' }}
-                >
-                  <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
-                    {participant.isLocal ? 'You' : (participant.name || participant.identity) + (isShowingScreenAsVideo ? ' (Screen)' : '')}
-                  </div>
-                  <ParticipantTile
-                    trackRef={displayRef as any}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
-                </div>
-              );
-            })}
-            {/* Show additional screen shares as small tiles (when multiple people screen sharing) */}
-            {additionalScreenShares.map((screen) => (
+            {thumbnails.map(({ participant, trackRef, isScreen }) => (
               <div
-                key={screen.participant.identity + '-additional-screen'}
+                key={`${participant.identity}-${trackRef.source}`}
                 className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
                 style={{ maxWidth: '200px', maxHeight: '150px' }}
               >
                 <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
-                  {(screen.participant.name || screen.participant.identity) + ' (Screen)'}
+                  {participant.isLocal ? 'You' : (participant.name || participant.identity)}
+                  {isScreen ? ' (Screen)' : ''}
                 </div>
-                <ParticipantTile trackRef={screen as any} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <ParticipantTile
+                  trackRef={trackRef as any}
+                  style={{ width: '100%', height: '100%', objectFit: isScreen ? 'contain' : 'cover' }}
+                />
               </div>
             ))}
           </div>
         </div>
       ) : (
-        // Regular grid layout for camera-only calls
         <div className="grid gap-4 w-full h-full max-w-6xl grid-cols-1 md:grid-cols-2">
-          {localCameras.map((trackRef) => (
-            <div
-              key={trackRef.participant.identity}
-              className="relative rounded-xl overflow-hidden bg-zinc-900"
-            >
+          {localCamera && (
+            <div className="relative rounded-xl overflow-hidden bg-zinc-900">
               <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
                 You
               </div>
-              <ParticipantTile trackRef={trackRef} />
+              <ParticipantTile trackRef={localCamera} />
             </div>
-          ))}
-          {remoteScreens.map((trackRef) => (
+          )}
+          {remoteCameras.map((trackRef) => (
             <div
               key={trackRef.participant.identity}
               className="relative rounded-xl overflow-hidden bg-zinc-900"

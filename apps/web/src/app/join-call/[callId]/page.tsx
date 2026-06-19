@@ -790,13 +790,48 @@ export default function CustomerJoinCallPage() {
 function VideoLayout({ name }: { name: string }) {
   const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
 
-  const localCameras = tracks.filter((track) => track.participant.isLocal && track.source === Track.Source.Camera);
+  const localCamera = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.Camera);
   const localScreen = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.ScreenShare);
   const remoteScreens = tracks.filter((track) => !track.participant.isLocal && track.source === Track.Source.ScreenShare);
   const remoteCameras = tracks.filter((track) => !track.participant.isLocal && track.source === Track.Source.Camera);
-
-  const anyoneSharingScreen = Boolean(localScreen || remoteScreens.length > 0);
+  const primaryScreen = remoteScreens[0] ?? localScreen;
+  const anyoneSharingScreen = Boolean(primaryScreen);
   const hasRemoteVideo = remoteCameras.length > 0 || remoteScreens.length > 0;
+
+  const remoteParticipantIdentities = Array.from(
+    new Set([
+      ...remoteScreens.map((t) => t.participant.identity),
+      ...remoteCameras.map((t) => t.participant.identity),
+    ]),
+  );
+
+  type Thumbnail = { participant: any; trackRef: any; isScreen: boolean };
+  const thumbnails: Thumbnail[] = remoteParticipantIdentities
+    .map((participantIdentity) => {
+      const screenRef = remoteScreens.find((t) => t.participant.identity === participantIdentity);
+      const cameraRef = remoteCameras.find((t) => t.participant.identity === participantIdentity);
+      const isPrimaryScreenParticipant = screenRef && primaryScreen?.participant.identity === screenRef.participant.identity;
+
+      if (isPrimaryScreenParticipant) return null;
+
+      const displayRef = screenRef ?? cameraRef;
+      if (!displayRef) return null;
+
+      return {
+        participant: displayRef.participant,
+        trackRef: displayRef,
+        isScreen: Boolean(screenRef),
+      };
+    })
+    .filter((thumbnail): thumbnail is Thumbnail => Boolean(thumbnail));
+
+  if (localCamera && !localScreen) {
+    thumbnails.push({ participant: localCamera.participant, trackRef: localCamera, isScreen: false });
+  }
+
+  if (localScreen && primaryScreen?.participant.identity !== localScreen.participant.identity) {
+    thumbnails.push({ participant: localScreen.participant, trackRef: localScreen, isScreen: true });
+  }
 
   return (
     <div className="flex-1 flex items-center justify-center p-4">
@@ -813,55 +848,42 @@ function VideoLayout({ name }: { name: string }) {
           </div>
         </div>
       ) : anyoneSharingScreen ? (
-        // Screen sharing layout: main screen + small camera thumbnails
         <div className="flex flex-col lg:flex-row gap-4 w-full h-full">
           <div className="flex-1 rounded-xl overflow-hidden bg-zinc-900 relative min-h-0">
             <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
-              {localScreen ? 'You (Screen)' : (remoteScreens[0]?.participant?.name || remoteScreens[0]?.participant?.identity || 'Agent') + ' (Screen)'}
+              {primaryScreen?.participant.isLocal ? 'You (Screen)' : (primaryScreen?.participant?.name || primaryScreen?.participant?.identity || 'Agent') + ' (Screen)'}
             </div>
-            <ParticipantTile trackRef={localScreen || remoteScreens[0]} className="w-full h-full" />
+            <ParticipantTile trackRef={primaryScreen} className="w-full h-full" />
           </div>
           <div className="flex lg:flex-col gap-3 overflow-x-auto lg:overflow-y-auto lg:w-52">
-            {localCameras.map((trackRef) => (
+            {thumbnails.map(({ participant, trackRef, isScreen }) => (
               <div
-                key={trackRef.participant.identity}
+                key={`${participant.identity}-${trackRef.source}`}
                 className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
                 style={{ maxWidth: '200px', maxHeight: '150px' }}
               >
                 <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-violet-600/90 text-white text-[10px] font-semibold">
-                  {name || 'You'}
+                  {participant.isLocal ? (name || 'You') : (participant.name || participant.identity)}
+                  {isScreen ? ' (Screen)' : ''}
                 </div>
-                <ParticipantTile trackRef={trackRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              </div>
-            ))}
-            {remoteCameras.map((trackRef) => (
-              <div
-                key={trackRef.participant.identity}
-                className="relative rounded-xl overflow-hidden bg-zinc-900 aspect-video lg:aspect-[16/9] flex-shrink-0 lg:w-full"
-                style={{ maxWidth: '200px', maxHeight: '150px' }}
-              >
-                <div className="absolute top-1 left-1 z-10 px-1.5 py-0.5 rounded bg-zinc-700/90 text-white text-[10px] font-semibold">
-                  {trackRef.participant.name || trackRef.participant.identity}
-                </div>
-                <ParticipantTile trackRef={trackRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <ParticipantTile
+                  trackRef={trackRef as any}
+                  style={{ width: '100%', height: '100%', objectFit: isScreen ? 'contain' : 'cover' }}
+                />
               </div>
             ))}
           </div>
         </div>
       ) : (
-        // Regular grid layout for camera-only calls
         <div className="grid gap-4 w-full h-full max-w-6xl grid-cols-1 md:grid-cols-2">
-          {localCameras.map((trackRef) => (
-            <div
-              key={trackRef.participant.identity}
-              className="relative rounded-xl overflow-hidden bg-zinc-900"
-            >
+          {localCamera && (
+            <div className="relative rounded-xl overflow-hidden bg-zinc-900">
               <div className="absolute top-2 left-2 z-10 px-2 py-1 rounded-md bg-violet-600/90 text-white text-xs font-semibold">
                 {name || 'You'}
               </div>
-              <ParticipantTile trackRef={trackRef} />
+              <ParticipantTile trackRef={localCamera} />
             </div>
-          ))}
+          )}
           {remoteCameras.map((trackRef) => (
             <div
               key={trackRef.participant.identity}
