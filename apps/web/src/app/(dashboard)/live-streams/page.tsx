@@ -44,6 +44,7 @@ export default function LiveStreamsPage() {
   const [loading, setLoading] = useState(true);
   const [modalType, setModalType] = useState<ModalType>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [endingId, setEndingId] = useState<string | null>(null);
 
   // Schedule form state
   const [title, setTitle] = useState('');
@@ -199,6 +200,23 @@ export default function LiveStreamsPage() {
       console.error('[LiveStreams] handleDeleteStream error:', err);
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleEndStreamDirect = async (streamId: string) => {
+    if (!window.confirm('Are you sure you want to end this live stream? This will stop the broadcast for all viewers.')) return;
+    try {
+      setEndingId(streamId);
+      await liveStreamApi.end(streamId);
+      toast.success('Live stream ended');
+      fetchStreams();
+      fetchQuota();
+    } catch (err: any) {
+      const msg = err?.message || 'Failed to end live stream';
+      toast.error(`End Stream Error: ${msg}`);
+      console.error('[LiveStreams] handleEndStreamDirect error:', err);
+    } finally {
+      setEndingId(null);
     }
   };
 
@@ -423,12 +441,22 @@ export default function LiveStreamsPage() {
                       {/* Actions */}
                       <div className="flex items-center gap-2 flex-shrink-0 pt-1">
                         {stream.status === 'LIVE' ? (
-                          <button
-                            onClick={() => router.push(`/live-streams/${stream.id}`)}
-                            className="px-3.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all animate-pulse"
-                          >
-                            Join Stream
-                          </button>
+                          <>
+                            <button
+                              onClick={() => router.push(`/live-streams/${stream.id}`)}
+                              disabled={endingId !== null}
+                              className="px-3.5 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all animate-pulse disabled:opacity-50"
+                            >
+                              Join Stream
+                            </button>
+                            <button
+                              onClick={() => handleEndStreamDirect(stream.id)}
+                              disabled={endingId !== null}
+                              className="px-3.5 py-1.5 rounded-lg border border-red-600/30 hover:bg-red-500/10 text-red-500 text-xs font-bold transition-all disabled:opacity-50"
+                            >
+                              {endingId === stream.id ? 'Ending...' : 'End'}
+                            </button>
+                          </>
                         ) : (
                           <button
                             onClick={() => handleLaunchStream(stream.id)}
@@ -439,8 +467,9 @@ export default function LiveStreamsPage() {
                         )}
                         <button
                           onClick={() => handleDeleteStream(stream.id)}
-                          disabled={deletingId !== null}
-                          className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500 transition-all disabled:opacity-50"
+                          disabled={deletingId !== null || stream.status === 'LIVE'}
+                          title={stream.status === 'LIVE' ? 'Cannot delete a live stream. End it first.' : 'Delete event'}
+                          className="p-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500 transition-all disabled:opacity-50 disabled:hover:bg-transparent disabled:text-rose-500/30"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
