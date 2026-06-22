@@ -321,4 +321,42 @@ export class LiveStreamService {
       },
     };
   }
+
+  /**
+   * Delete a scheduled or ended stream.
+   */
+  async deleteStream(streamId: string, tenantId: string): Promise<any> {
+    await this.prisma.setTenantContext(tenantId);
+
+    const stream = await this.prisma.liveStream.findFirst({
+      where: { id: streamId, tenantId },
+    });
+
+    if (!stream) {
+      throw new NotFoundException('Live stream not found');
+    }
+
+    if (stream.status === LiveStreamStatus.LIVE) {
+      throw new BadRequestException('Cannot delete a stream that is currently live. End the stream first.');
+    }
+
+    await this.prisma.liveStream.delete({
+      where: { id: streamId },
+    });
+
+    return { deleted: true };
+  }
+
+  /**
+   * Returns total stream count for the tenant (for quota display).
+   */
+  async getStreamCount(tenantId: string): Promise<{ count: number; limit: number }> {
+    await this.prisma.setTenantContext(tenantId);
+
+    const count = await this.prisma.liveStream.count({
+      where: { tenantId },
+    });
+
+    return { count, limit: 25 };
+  }
 }

@@ -111,6 +111,13 @@ export class LiveStreamController {
     return this.liveStreamService.featureProduct(streamId, productId, tenantId);
   }
 
+  @Get('count')
+  @RequirePermissions('video_call:join')
+  @ApiOperation({ summary: 'Get total stream count for quota display' })
+  async getStreamCount(@TenantId() tenantId: string): Promise<any> {
+    return this.liveStreamService.getStreamCount(tenantId);
+  }
+
   @Get(':id')
   @Public() // Allow public viewers to pull stream details & products
   @ApiOperation({ summary: 'Get stream details' })
@@ -127,5 +134,16 @@ export class LiveStreamController {
     @Query('page') page?: number,
   ): Promise<any> {
     return this.liveStreamService.listStreams(tenantId, limit || 20, page || 1);
+  }
+
+  @Delete(':id')
+  @RequirePermissions('video_call:create')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a scheduled or ended stream' })
+  async deleteStream(
+    @Param('id') streamId: string,
+    @TenantId() tenantId: string,
+  ): Promise<any> {
+    return this.liveStreamService.deleteStream(streamId, tenantId);
   }
 }

@@ -247,6 +247,8 @@ export const liveStreamApi = {
     apiClient<any>(`/live-streams/${streamId}/feature/${productId}`, { method: 'POST' }),
   get: (streamId: string) => apiClient<any>(`/live-streams/${streamId}`),
   list: (limit = 20, page = 1) => apiClient<any>(`/live-streams?limit=${limit}&page=${page}`),
+  delete: (streamId: string) => apiClient<any>(`/live-streams/${streamId}`, { method: 'DELETE' }),
+  getCount: () => apiClient<{ count: number; limit: number }>('/live-streams/count'),
 };
 
 export const storageApi = {
