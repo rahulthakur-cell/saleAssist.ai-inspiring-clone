@@ -71,7 +71,9 @@ export default function LiveStreamsPage() {
       const res = await liveStreamApi.list(50, 1);
       setStreams(res.data || []);
     } catch (err: any) {
-      toast.error('Failed to load live streams');
+      const msg = err?.message || 'Failed to load live streams';
+      toast.error(`Live Streams: ${msg}`);
+      console.error('[LiveStreams] fetchStreams error:', err);
     } finally {
       setLoading(false);
     }
@@ -81,8 +83,9 @@ export default function LiveStreamsPage() {
     try {
       const res = await liveStreamApi.getCount();
       setQuota(res);
-    } catch {
-      // Silently fail - quota badge is non-critical
+    } catch (err: any) {
+      console.error('[LiveStreams] fetchQuota error:', err);
+      // Non-critical — don't show toast for quota errors
     }
   };
 
@@ -117,7 +120,9 @@ export default function LiveStreamsPage() {
       fetchStreams();
       fetchQuota();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to schedule event');
+      const msg = err?.message || 'Failed to schedule event';
+      toast.error(`Schedule Event: ${msg}`);
+      console.error('[LiveStreams] handleScheduleStream error:', err);
     } finally {
       setCreating(false);
     }
@@ -136,7 +141,9 @@ export default function LiveStreamsPage() {
       toast.success('Going live now!');
       router.push(`/live-streams/${res.id}`);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to start instant stream');
+      const msg = err?.message || 'Failed to start instant stream';
+      toast.error(`Instant Stream: ${msg}`);
+      console.error('[LiveStreams] handleInstantStream error:', err);
     } finally {
       setCreating(false);
     }
@@ -159,7 +166,9 @@ export default function LiveStreamsPage() {
       fetchStreams();
       fetchQuota();
     } catch (err: any) {
-      toast.error(err.message || 'Failed to create recorded event');
+      const msg = err?.message || 'Failed to create recorded event';
+      toast.error(`Recorded Event: ${msg}`);
+      console.error('[LiveStreams] handleRecordedStream error:', err);
     } finally {
       setCreating(false);
     }
@@ -170,7 +179,9 @@ export default function LiveStreamsPage() {
       await liveStreamApi.start(streamId);
       router.push(`/live-streams/${streamId}`);
     } catch (err: any) {
-      toast.error('Failed to start stream');
+      const msg = err?.message || 'Failed to start stream';
+      toast.error(`Go Live: ${msg}`);
+      console.error('[LiveStreams] handleLaunchStream error:', err);
     }
   };
 
@@ -183,7 +194,9 @@ export default function LiveStreamsPage() {
       toast.success('Event deleted');
       fetchQuota();
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to delete event');
+      const msg = err?.message || 'Failed to delete event';
+      toast.error(`Delete Event: ${msg}`);
+      console.error('[LiveStreams] handleDeleteStream error:', err);
     } finally {
       setDeletingId(null);
     }

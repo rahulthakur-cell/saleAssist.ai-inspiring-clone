@@ -146,7 +146,8 @@ export default function LiveStreamRoomPage() {
       });
 
     } catch (err: any) {
-      toast.error('Failed to connect to live stream');
+      const msg = err?.message || 'Failed to connect to live stream';
+      toast.error(`Connection Error: ${msg}`);
       router.push('/live-streams');
     } finally {
       setLoading(false);
@@ -170,6 +171,8 @@ export default function LiveStreamRoomPage() {
       await liveStreamApi.end(streamId);
       toast.success('Live stream ended');
     } catch (err: any) {
+      const msg = err?.message || 'Failed to end live stream';
+      toast.error(`End Stream Error: ${msg}`);
       console.warn('Failed to end stream room', err.message);
     } finally {
       router.push('/live-streams');
@@ -197,7 +200,8 @@ export default function LiveStreamRoomPage() {
       setNewProdImage('');
       setNewProdPrice('');
     } catch (err: any) {
-      toast.error('Failed to add product');
+      const msg = err?.message || 'Failed to add product';
+      toast.error(`Add Product Error: ${msg}`);
     }
   };
 
@@ -221,7 +225,8 @@ export default function LiveStreamRoomPage() {
       }
       toast.success('Product removed');
     } catch (err: any) {
-      toast.error('Failed to remove product');
+      const msg = err?.message || 'Failed to remove product';
+      toast.error(`Remove Product Error: ${msg}`);
     }
   };
 
