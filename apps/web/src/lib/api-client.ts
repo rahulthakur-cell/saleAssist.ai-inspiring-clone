@@ -329,5 +329,41 @@ export const searchApi = {
     apiClient('/search/reindex', { method: 'POST' }),
 };
 
+export const contactApi = {
+  list: (opts?: { search?: string; source?: string; page?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.source) params.set('source', opts.source);
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return apiClient<any>(`/contacts${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: string) => apiClient<any>(`/contacts/${id}`),
+  create: (data: {
+    firstName: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+    title?: string;
+    companyId?: string;
+    source?: string;
+    tags?: string[];
+    customFields?: Record<string, unknown>;
+  }) => apiClient<any>('/contacts', { method: 'POST', body: data }),
+  update: (id: string, data: Partial<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    title: string;
+    companyId: string;
+    source: string;
+    tags: string[];
+    customFields: Record<string, unknown>;
+  }>) => apiClient<any>(`/contacts/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => apiClient<any>(`/contacts/${id}`, { method: 'DELETE' }),
+};
+
 export { apiClient, ApiError };
 export default apiClient;

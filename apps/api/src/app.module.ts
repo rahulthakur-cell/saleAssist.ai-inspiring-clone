@@ -18,6 +18,7 @@ import { WidgetModule } from './modules/widget/widget.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { SearchModule } from './modules/search/search.module';
+import { ContactModule } from './modules/contact/contact.module';
 import { TenantResolverMiddleware } from './common/middleware/tenant-resolver.middleware';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { RedisModule } from './common/redis/redis.module';
@@ -83,6 +84,7 @@ import { AppController } from './app.controller';
     AnalyticsModule,
     BillingModule,
     SearchModule,
+    ContactModule,
   ],
   controllers: [AppController],
 })
