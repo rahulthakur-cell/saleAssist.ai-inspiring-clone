@@ -14,6 +14,19 @@ interface ApiResponse<T = unknown> {
   timestamp: string;
 }
 
+type VideoCallAsset = {
+  id: string;
+  name: string;
+  type: 'image' | 'video' | 'document' | 'audio' | 'other';
+  url: string;
+  sizeBytes?: number;
+  durationSec?: number;
+  createdAt: string;
+  source: 'recording' | 'chat';
+  callId?: string;
+  callName?: string;
+};
+
 class ApiError extends Error {
   constructor(
     public statusCode: number,
@@ -90,7 +103,7 @@ async function apiClient<T = unknown>(endpoint: string, options: ApiOptions = {}
   }
 
   const tenantId = typeof window !== 'undefined' ? localStorage.getItem('tenantId') : null;
-  if (tenantId) {
+  if (tenantId && tenantId !== 'undefined' && tenantId !== 'null') {
     requestHeaders['X-Tenant-ID'] = tenantId;
   }
 
@@ -188,15 +201,25 @@ export const videoCallApi = {
   getConfig: () => apiClient<{ liveKitUrl: string }>('/video-calls/livekit-config'),
   list: (limit = 20, page = 1) => apiClient<any>(`/video-calls?limit=${limit}&page=${page}`),
   getQueue: () => apiClient<{ waitingCount: number }>('/video-calls/queue'),
-getChatHistory: (callId: string, tenantId?: string) =>
-     apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>>(`/video-calls/${callId}/chat${tenantId ? `?tenantId=${tenantId}` : ''}`),
+getChatHistory: (callId: string, tenantId?: string) => {
+    const hasValidTenant = tenantId && tenantId !== 'undefined' && tenantId !== 'null';
+    return apiClient<Array<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>>(`/video-calls/${callId}/chat${hasValidTenant ? `?tenantId=${tenantId}` : ''}`);
+  },
   sendChatMessage: (callId: string, data: { message: string; senderName?: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }) =>
      apiClient<{ id: string; senderName: string; message: string; createdAt: string; attachmentUrl?: string; attachmentType?: string; attachmentName?: string }>(`/video-calls/${callId}/chat`, { method: 'POST', body: data }),
-  getChatUploadUrl: (callId: string, data: { fileName: string; fileType: string }, tenantId?: string) =>
-     apiClient<{ presignedUrl: string; publicUrl: string; objectName: string }>(`/video-calls/${callId}/chat/upload${tenantId ? `?tenantId=${tenantId}` : ''}`, { method: 'POST', body: data, headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined }),
-  uploadRecording: (callId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }, tenantId?: string) =>
-     apiClient<{ id: string; url: string; presignedUrl: string; objectName: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data, headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined }),
-   startRecording: (callId: string) =>
+  getChatUploadUrl: (callId: string, data: { fileName: string; fileType: string }, tenantId?: string) => {
+    const hasValidTenant = tenantId && tenantId !== 'undefined' && tenantId !== 'null';
+    return apiClient<{ presignedUrl: string; publicUrl: string; objectName: string }>(`/video-calls/${callId}/chat/upload${hasValidTenant ? `?tenantId=${tenantId}` : ''}`, { method: 'POST', body: data, headers: hasValidTenant ? { 'X-Tenant-ID': tenantId } : undefined });
+  },
+  uploadRecording: (callId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }, tenantId?: string) => {
+    const hasValidTenant = tenantId && tenantId !== 'undefined' && tenantId !== 'null';
+    return apiClient<{ id: string; url: string; presignedUrl: string; objectName: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data, headers: hasValidTenant ? { 'X-Tenant-ID': tenantId } : undefined });
+  },
+  getAssets: (callId: string, type?: string) =>
+    apiClient<{ assets: VideoCallAsset[]; summary: Record<string, number> }>(`/video-calls/${callId}/assets${type && type !== 'all' ? `?type=${type}` : ''}`),
+  listAssets: (type?: string) =>
+    apiClient<{ assets: VideoCallAsset[]; summary: Record<string, number> }>(`/video-calls/assets${type && type !== 'all' ? `?type=${type}` : ''}`),
+  startRecording: (callId: string) =>
      apiClient<{ recordingId: string; fallbackToScreen?: boolean }>(`/video-calls/${callId}/recordings/start`, { method: 'POST' }),
    stopRecording: (callId: string, recordingId?: string) =>
      apiClient(`/video-calls/${callId}/recordings/stop`, { method: 'POST', body: { recordingId } }),

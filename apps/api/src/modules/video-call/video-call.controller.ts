@@ -192,6 +192,24 @@ export class VideoCallController {
     return this.videoCallService.stopRoomRecording(callId, tenantId, dto.recordingId);
   }
 
+  @Get('assets')
+  @RequirePermissions('video_call:view')
+  @ApiOperation({ summary: 'List MinIO-stored assets across video calls' })
+  async listAssets(@TenantId() tenantId: string, @Query('type') type?: string): Promise<any> {
+    return this.videoCallService.listAllCallAssets(tenantId, type);
+  }
+
+  @Get(':id/assets')
+  @RequirePermissions('video_call:join')
+  @ApiOperation({ summary: 'List MinIO-stored assets for a video call' })
+  async getAssets(
+    @Param('id') callId: string,
+    @TenantId() tenantId: string,
+    @Query('type') type?: string,
+  ): Promise<any> {
+    return this.videoCallService.listCallAssets(callId, tenantId, type);
+  }
+
   @Get(':id')
   @RequirePermissions('video_call:view')
   @ApiOperation({ summary: 'Get details of a specific video call' })

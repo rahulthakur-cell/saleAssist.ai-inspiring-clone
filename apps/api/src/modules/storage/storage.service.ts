@@ -71,6 +71,43 @@ export class StorageService implements OnModuleInit {
     return this.minioClient.presignedPutObject(this.bucketName, objectName, expirySeconds);
   }
 
+  async listObjects(prefix: string): Promise<Array<{ name: string; size: number; lastModified: Date; etag?: string; contentType?: string }>> {
+    if (!this.minioClient) {
+      throw new Error('Storage service is not configured. MinIO client failed to initialize.');
+    }
+
+    const objects: Array<{ name: string; size: number; lastModified: Date; etag?: string }> = [];
+    const stream = this.minioClient.listObjects(this.bucketName, prefix, true);
+
+    stream.on('data', (item: any) => {
+      objects.push({
+        name: item.name,
+        size: item.size || 0,
+        lastModified: item.lastModified instanceof Date ? item.lastModified : new Date(),
+        etag: item.etag,
+      });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      stream.on('end', () => resolve());
+      stream.on('error', (error: Error) => reject(error));
+    });
+
+    return Promise.all(
+      objects.map(async (item) => {
+        try {
+          const stat = await this.minioClient.statObject(this.bucketName, item.name);
+          const statAny = stat as any;
+          const contentType = statAny.contentType || stat.metaData?.['content-type'] || stat.metaData?.['Content-Type'];
+          return { ...item, contentType };
+        } catch (error: any) {
+          this.logger.warn(`Failed to stat MinIO object ${item.name}: ${error.message}`);
+          return item;
+        }
+      }),
+    );
+  }
+
   /**
    * Deletes a file from the S3 bucket.
    */

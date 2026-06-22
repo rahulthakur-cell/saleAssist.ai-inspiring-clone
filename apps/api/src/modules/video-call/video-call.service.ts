@@ -11,6 +11,22 @@ import { StorageService } from '../storage/storage.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
+type VideoCallAssetMediaType = 'all' | 'image' | 'video' | 'document' | 'audio' | 'other';
+
+type VideoCallAsset = {
+  id: string;
+  name: string;
+  type: VideoCallAssetMediaType;
+  url: string;
+  sizeBytes?: number;
+  durationSec?: number;
+  createdAt: string;
+  source: 'recording' | 'chat';
+  senderName?: string;
+  callId?: string;
+  callName?: string;
+};
+
 @Injectable()
 export class VideoCallService {
   private readonly logger = new Logger(VideoCallService.name);
@@ -223,6 +239,138 @@ export class VideoCallService {
   getLiveKitConfig(): { liveKitUrl: string } {
     const liveKitUrl = this.configService.get<string>('LIVEKIT_URL', 'http://localhost:7880');
     return { liveKitUrl };
+  }
+
+  async listCallAssets(callId: string, tenantId: string, mediaType?: string): Promise<{ assets: VideoCallAsset[]; summary: Record<Exclude<VideoCallAssetMediaType, 'all'>, number> }> {
+    await this.prisma.setTenantContext(tenantId);
+    const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
+    if (!call) throw new NotFoundException('Video call not found');
+
+    const normalizedType = this.normalizeAssetMediaType(mediaType);
+    const [recordingObjects, chatObjects] = await Promise.all([
+      this.storage.listObjects(`recordings/${callId}-`),
+      this.storage.listObjects(`chat-attachments/${callId}-`),
+    ]);
+
+    const assets: VideoCallAsset[] = [
+      ...recordingObjects.map((object) => ({
+        id: object.name,
+        name: object.name.replace(`recordings/${callId}-`, ''),
+        type: this.getAssetMediaType(object.contentType, object.name),
+        url: this.storage.getPublicUrl(object.name),
+        sizeBytes: object.size,
+        createdAt: object.lastModified.toISOString(),
+        source: 'recording' as const,
+        senderName: 'Room Recording',
+      })),
+      ...chatObjects.map((object) => ({
+        id: object.name,
+        name: object.name.replace(`chat-attachments/${callId}-`, ''),
+        type: this.getAssetMediaType(object.contentType, object.name),
+        url: this.storage.getPublicUrl(object.name),
+        sizeBytes: object.size,
+        createdAt: object.lastModified.toISOString(),
+        source: 'chat' as const,
+        senderName: 'Chat Attachment',
+      })),
+    ];
+
+    const filteredAssets = normalizedType === 'all'
+      ? assets
+      : assets.filter((asset) => asset.type === normalizedType);
+
+    return {
+      assets: filteredAssets.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+      summary: this.getAssetSummary(filteredAssets),
+    };
+  }
+
+  async listAllCallAssets(tenantId: string, mediaType?: string): Promise<{ assets: VideoCallAsset[]; summary: Record<Exclude<VideoCallAssetMediaType, 'all'>, number> }> {
+    await this.prisma.setTenantContext(tenantId);
+    const normalizedType = this.normalizeAssetMediaType(mediaType);
+    const calls = await this.prisma.videoCall.findMany({
+      where: { tenantId },
+      select: { id: true, visitorName: true, createdAt: true },
+    });
+    const callsById = new Map(calls.map((call) => [call.id, call]));
+
+    const [recordingObjects, chatObjects] = await Promise.all([
+      this.storage.listObjects('recordings/'),
+      this.storage.listObjects('chat-attachments/'),
+    ]);
+
+    const assets: VideoCallAsset[] = [
+      ...recordingObjects.map((object) => this.mapMinioObjectToAsset(object, 'recordings/', 'recording', 'Room Recording')),
+      ...chatObjects.map((object) => this.mapMinioObjectToAsset(object, 'chat-attachments/', 'chat', 'Chat Attachment')),
+    ].map((asset) => {
+      const call = asset.callId ? callsById.get(asset.callId) : undefined;
+      return {
+        ...asset,
+        callName: call?.visitorName || 'Unknown Call',
+      };
+    });
+
+    const filteredAssets = normalizedType === 'all'
+      ? assets
+      : assets.filter((asset) => asset.type === normalizedType);
+
+    return {
+      assets: filteredAssets.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+      summary: this.getAssetSummary(filteredAssets),
+    };
+  }
+
+  private mapMinioObjectToAsset(object: { name: string; size: number; lastModified: Date; contentType?: string }, prefix: string, source: 'recording' | 'chat', senderName: string): VideoCallAsset {
+    const callId = this.extractCallIdFromObjectName(object.name, prefix);
+    return {
+      id: object.name,
+      name: object.name.replace(`${prefix}${callId ? `${callId}-` : ''}`, ''),
+      type: this.getAssetMediaType(object.contentType, object.name),
+      url: this.storage.getPublicUrl(object.name),
+      sizeBytes: object.size,
+      createdAt: object.lastModified.toISOString(),
+      source,
+      senderName,
+      callId,
+    };
+  }
+
+  private extractCallIdFromObjectName(objectName: string, prefix: string): string | undefined {
+    const match = objectName.match(new RegExp(`^${prefix}(.+)-[A-Za-z0-9_-]{8}\\.[^.]+$`));
+    return match?.[1];
+  }
+
+  private getAssetSummary(assets: VideoCallAsset[]) {
+    return assets.reduce(
+      (acc, asset) => {
+        if (asset.type !== 'all') acc[asset.type] += 1;
+        return acc;
+      },
+      { image: 0, video: 0, document: 0, audio: 0, other: 0 },
+    );
+  }
+
+  private normalizeAssetMediaType(mediaType?: string): VideoCallAssetMediaType {
+    if (!mediaType || mediaType === 'all') return 'all';
+    if (mediaType === 'image' || mediaType === 'video' || mediaType === 'document' || mediaType === 'audio' || mediaType === 'other') {
+      return mediaType;
+    }
+    return 'all';
+  }
+
+  private getAssetMediaType(contentType?: string, fileName?: string): VideoCallAssetMediaType {
+    const mime = (contentType || '').toLowerCase();
+    const extension = (fileName?.split('.').pop() || '').toLowerCase();
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'];
+    const videoExtensions = ['mp4', 'webm', 'mov', 'mkv', 'avi'];
+    const audioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
+    const documentExtensions = ['pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx', 'ppt', 'pptx'];
+
+    if (mime.startsWith('image/') || imageExtensions.includes(extension)) return 'image';
+    if (mime.startsWith('video/') || videoExtensions.includes(extension)) return 'video';
+    if (mime.startsWith('audio/') || audioExtensions.includes(extension)) return 'audio';
+    if (mime.startsWith('text/') || mime.includes('pdf') || documentExtensions.includes(extension)) return 'document';
+    return 'other';
   }
 
   /**

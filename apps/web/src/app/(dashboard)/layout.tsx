@@ -20,6 +20,7 @@ const navItems = [
     title: 'Engage',
     items: [
       { name: 'Video Calls', href: '/video-calls', icon: VideoIcon },
+      { name: 'Assets', href: '/assets', icon: FolderOpenIcon },
       { name: 'Live Streams', href: '/live-streams', icon: RadioIcon },
       { name: 'Shoppable Videos', href: '/shoppable-videos', icon: ShoppingBagIcon },
       { name: 'Video FAQ', href: '/video-faq', icon: HelpCircleIcon },
@@ -393,6 +394,9 @@ function LayoutDashboardIcon({ className }: { className?: string }) {
 }
 function VideoIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect width="15" height="14" x="1" y="5" rx="2" ry="2" /></svg>;
+}
+function FolderOpenIcon({ className }: { className?: string }) {
+  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5L20.8 18H5.2a2 2 0 0 1-1.94-1.5L2 11h4Z" /><path d="M22 10H10.8a2 2 0 0 0-1.8 1.1L8 13H4a2 2 0 0 1-1.94-1.5L1 6.5A2.5 2.5 0 0 1 3.5 4h4a2.5 2.5 0 0 1 2.32 1.57L10.5 7H18a2 2 0 0 1 2 2Z" /></svg>;
 }
 function RadioIcon({ className }: { className?: string }) {
   return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4" /><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4" /><path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" /><circle cx="12" cy="12" r="2" /></svg>;

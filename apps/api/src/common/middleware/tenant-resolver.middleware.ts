@@ -23,7 +23,10 @@ export class TenantResolverMiddleware implements NestMiddleware {
     let tenantId: string | undefined;
 
     // 1. Check X-Tenant-ID header or query parameter
-    tenantId = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+    const headerOrQueryTenant = (req.headers['x-tenant-id'] as string) || (req.query.tenantId as string);
+    if (headerOrQueryTenant && headerOrQueryTenant !== 'undefined' && headerOrQueryTenant !== 'null') {
+      tenantId = headerOrQueryTenant;
+    }
 
     // 2. Check JWT token
     if (!tenantId) {

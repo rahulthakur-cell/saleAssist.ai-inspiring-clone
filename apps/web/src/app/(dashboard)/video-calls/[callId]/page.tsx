@@ -1027,7 +1027,6 @@ export default function VideoCallRoomPage() {
 
         <form onSubmit={handleSaveNotes} className="flex-1 flex flex-col justify-between gap-6">
           <div className="space-y-4">
-            {/* Contact details */}
             <div className="space-y-3.5">
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
@@ -1069,7 +1068,6 @@ export default function VideoCallRoomPage() {
               </div>
             </div>
 
-            {/* Note text field */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5" /> Call Consultation Notes
