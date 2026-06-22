@@ -215,6 +215,8 @@ getChatHistory: (callId: string, tenantId?: string) => {
     const hasValidTenant = tenantId && tenantId !== 'undefined' && tenantId !== 'null';
     return apiClient<{ id: string; url: string; presignedUrl: string; objectName: string }>(`/video-calls/${callId}/recordings/upload`, { method: 'POST', body: data, headers: hasValidTenant ? { 'X-Tenant-ID': tenantId } : undefined });
   },
+  deleteAsset: (key: string) =>
+     apiClient<any>(`/video-calls/assets?key=${encodeURIComponent(key)}`, { method: 'DELETE' }),
   getAssets: (callId: string, type?: string) =>
     apiClient<{ assets: VideoCallAsset[]; summary: Record<string, number> }>(`/video-calls/${callId}/assets${type && type !== 'all' ? `?type=${type}` : ''}`),
   listAssets: (type?: string) =>

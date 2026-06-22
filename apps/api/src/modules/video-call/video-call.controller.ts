@@ -3,6 +3,7 @@ import {
   Post,
   Patch,
   Get,
+  Delete,
   Body,
   Param,
   Query,
@@ -197,6 +198,19 @@ export class VideoCallController {
   @ApiOperation({ summary: 'List MinIO-stored assets across video calls' })
   async listAssets(@TenantId() tenantId: string, @Query('type') type?: string): Promise<any> {
     return this.videoCallService.listAllCallAssets(tenantId, type);
+  }
+
+  @Delete('assets')
+  @RequirePermissions('video_call:join')
+  @ApiOperation({ summary: 'Delete a video call asset from MinIO and database' })
+  async deleteAsset(
+    @TenantId() tenantId: string,
+    @Query('key') key: string,
+  ): Promise<any> {
+    if (!key) {
+      throw new BadRequestException('Asset key required');
+    }
+    return this.videoCallService.deleteCallAsset(tenantId, key);
   }
 
   @Get(':id/assets')

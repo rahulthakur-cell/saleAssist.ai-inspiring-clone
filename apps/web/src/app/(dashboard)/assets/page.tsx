@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Image, Film, FileText, Music, HardDrive, ExternalLink } from 'lucide-react';
+import { Image, Film, FileText, Music, HardDrive, ExternalLink, Trash2 } from 'lucide-react';
 import { videoCallApi } from '@/lib/api-client';
+import { toast } from 'sonner';
 
 type VideoCallAsset = {
   id: string;
@@ -68,6 +69,21 @@ export default function AssetsPage() {
   const [filter, setFilter] = useState<AssetFilter>('all');
   const [assets, setAssets] = useState<VideoCallAsset[]>([]);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDelete = async (assetId: string) => {
+    if (!window.confirm('Are you sure you want to delete this asset? This action cannot be undone.')) return;
+    try {
+      setDeletingId(assetId);
+      await videoCallApi.deleteAsset(assetId);
+      setAssets((prev) => prev.filter((a) => a.id !== assetId));
+      toast.success('Asset deleted successfully');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to delete asset');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -181,14 +197,25 @@ export default function AssetsPage() {
                       <td className="px-4 py-3 text-muted-foreground">{formatBytes(asset.sizeBytes)}</td>
                       <td className="px-4 py-3 text-muted-foreground">{formatDate(asset.createdAt)}</td>
                       <td className="px-4 py-3 text-right">
-                        <a
-                          href={asset.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-violet-500 hover:text-violet-400 font-medium"
-                        >
-                          Open <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        <div className="flex items-center justify-end gap-3.5">
+                          <a
+                            href={asset.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-violet-500 hover:text-violet-400 font-medium"
+                          >
+                            Open <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={deletingId !== null}
+                            onClick={() => handleDelete(asset.id)}
+                            className="inline-flex items-center gap-1.5 text-rose-500 hover:text-rose-400 disabled:opacity-50 font-medium cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            {deletingId === asset.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

@@ -119,6 +119,54 @@ export class VideoCallService {
     }
   }
 
+  async deleteCallAsset(tenantId: string, key: string) {
+    try {
+      await this.prisma.setTenantContext(tenantId);
+
+      // Parse callId from the key
+      const match = key.match(/^[^/]+\/(.+)-[^-/]+\.[^.]+$/);
+      const callId = match?.[1];
+
+      if (!callId) {
+        throw new BadRequestException('Invalid asset key format');
+      }
+
+      // Verify call exists and belongs to this tenant
+      const call = await this.prisma.videoCall.findFirst({
+        where: { id: callId, tenantId },
+      });
+      if (!call) {
+        throw new NotFoundException('Asset not found or access denied');
+      }
+
+      // 1. Delete from MinIO
+      await this.storage.deleteFile(key);
+
+      // 2. Delete/cleanup database records
+      const publicUrl = this.storage.getPublicUrl(key);
+
+      // Delete from VideoCallRecording if it exists
+      await this.prisma.videoCallRecording.deleteMany({
+        where: { videoCallId: callId, url: publicUrl },
+      });
+
+      // Clear attachment details in VideoCallChatMessage if it exists
+      await this.prisma.videoCallChatMessage.updateMany({
+        where: { videoCallId: callId, attachmentUrl: publicUrl },
+        data: {
+          attachmentUrl: null,
+          attachmentType: null,
+          attachmentName: null,
+        },
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      this.logger.error(`deleteCallAsset error: ${err.message}`, err.stack);
+      throw err;
+    }
+  }
+
   async attachRecording(callId: string, tenantId: string, data: { sizeBytes?: number; durationSec?: number; mimeType?: string }) {
     await this.prisma.setTenantContext(tenantId);
     const call = await this.prisma.videoCall.findFirst({ where: { id: callId, tenantId } });
