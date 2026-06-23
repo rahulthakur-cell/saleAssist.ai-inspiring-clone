@@ -26,7 +26,7 @@ export class WidgetController {
   ) {}
 
   @Get('config')
-  @RequirePermissions('settings:manage')
+  @Public()
   @ApiOperation({ summary: 'Get current widget configuration for tenant' })
   async getConfig(@TenantId() tenantId: string): Promise<any> {
     return this.widgetService.getOrCreateConfig(tenantId);
@@ -80,6 +80,50 @@ export class WidgetController {
 
   var config = ${JSON.stringify(safeConfig)};
   if (!config.isActive) return;
+
+  // Generate or retrieve visitor fingerprint
+  var fpKey = 'saleassist_visitor_fingerprint';
+  var fingerprint = localStorage.getItem(fpKey);
+  if (!fingerprint) {
+    fingerprint = 'sa_fp_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
+    localStorage.setItem(fpKey, fingerprint);
+  }
+
+  // Resolve API origin from current script source
+  var scriptSrc = document.currentScript ? document.currentScript.src : '';
+  var apiOrigin = '';
+  if (scriptSrc) {
+    try {
+      apiOrigin = new URL(scriptSrc).origin;
+    } catch(e) {}
+  }
+  if (!apiOrigin) {
+    apiOrigin = window.location.origin.replace(':3000', ':4000');
+  }
+
+  // Helper to send events to analytics API
+  function trackEvent(type, metadata) {
+    try {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', apiOrigin + '/api/v1/analytics/events?tenantId=${tenantId}', true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.send(JSON.stringify({
+        fingerprint: fingerprint,
+        type: type,
+        page: window.location.href,
+        referrer: document.referrer || '',
+        metadata: metadata || {},
+        visitorInfo: {
+          userAgent: navigator.userAgent
+        }
+      }));
+    } catch (e) {
+      console.error('[SaleAssist Analytics] Failed to track event', e);
+    }
+  }
+
+  // Track initial page view
+  trackEvent('PAGE_VIEW', {});
 
   var root = document.createElement('div');
   root.id = 'saleassist-widget-root';
@@ -164,7 +208,7 @@ export class WidgetController {
   root.innerHTML = [
     '<div id="saleassist-widget-tooltip">' + config.greeting + '</div>',
     '<div id="saleassist-widget-iframe-container">',
-    '  <iframe src="' + appUrl + '/widget-iframe?tenantId=' + tenantId + '" style="width:100%; height:100%; border:none;" />',
+    '  <iframe src="' + appUrl + '/widget-iframe?tenantId=' + tenantId + '&fingerprint=' + fingerprint + '" style="width:100%; height:100%; border:none;" />',
     '</div>',
     '<div id="saleassist-widget-bubble">',
     '  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">',
@@ -195,6 +239,8 @@ export class WidgetController {
       iframeContainer.style.display = 'block';
       setTimeout(function() { iframeContainer.classList.add('open'); }, 10);
       if (tooltip && tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+      // Track widget open event
+      trackEvent('WIDGET_OPEN', {});
     }
   });
 

@@ -4,10 +4,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   LiveKitRoom,
-  VideoConference,
   RoomAudioRenderer,
   ParticipantTile,
   useTracks,
+  useLocalParticipant,
 } from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import '@livekit/components-styles';
@@ -26,6 +26,12 @@ import {
   Megaphone,
   MessageSquare,
   ExternalLink,
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  Share,
+  ScreenShareOff,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { liveStreamApi } from '@/lib/api-client';
@@ -306,7 +312,7 @@ export default function LiveStreamRoomPage() {
             className="flex-1 flex flex-col justify-center"
           >
             {isHost ? (
-              <VideoConference />
+              <StreamHostLayout />
             ) : (
               <StreamViewerLayout />
             )}
@@ -559,6 +565,121 @@ function StreamViewerLayout() {
   return (
     <div className="flex-1 flex flex-col justify-center items-center h-full max-h-[80vh] overflow-hidden">
       <ParticipantTile trackRef={videoTrack} className="w-full h-full object-contain" />
+    </div>
+  );
+}
+
+// Host specific Media stream renderer with custom floating controls
+function StreamHostLayout() {
+  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
+
+  // Find host's local video tracks
+  const localCamera = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.Camera
+  );
+  const localScreen = tracks.find(
+    (t) => t.participant.isLocal && t.source === Track.Source.ScreenShare
+  );
+
+  const activeTrack = localScreen || localCamera;
+
+  const toggleMic = async () => {
+    if (!localParticipant) return;
+    try {
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle microphone');
+    }
+  };
+
+  const toggleCamera = async () => {
+    if (!localParticipant) return;
+    try {
+      await localParticipant.setCameraEnabled(!isCameraEnabled);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle camera');
+    }
+  };
+
+  const toggleScreenShare = async () => {
+    if (!localParticipant) return;
+    try {
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+      if (!isScreenShareEnabled) {
+        toast.success('Screen sharing started');
+      } else {
+        toast.info('Screen share stopped');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to toggle screen share');
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col justify-center items-center h-full relative overflow-hidden bg-zinc-950 p-4">
+      {activeTrack ? (
+        <div className="w-full h-full max-h-[85vh] flex items-center justify-center rounded-xl overflow-hidden bg-zinc-900">
+          <ParticipantTile 
+            trackRef={activeTrack} 
+            className="w-full h-full object-contain"
+          />
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center p-24 text-center space-y-4">
+          <div className="w-20 h-20 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center">
+            <VideoOff className="w-10 h-10 text-zinc-600" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-bold text-white text-sm">Your Camera is Off</h4>
+            <p className="text-xs text-muted-foreground">Turn on your camera or screen share to start streaming to viewers.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Host Control Bar */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 bg-black/70 backdrop-blur-md px-4 py-2.5 rounded-full border border-white/10 shadow-2xl">
+        <button
+          onClick={toggleMic}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-white transition-all hover:bg-zinc-800/80"
+          title={isMicrophoneEnabled ? "Mute Microphone" : "Unmute Microphone"}
+        >
+          {isMicrophoneEnabled ? (
+            <Mic className="w-[18px] h-[18px]" />
+          ) : (
+            <MicOff className="w-[18px] h-[18px] text-rose-500" />
+          )}
+        </button>
+
+        <button
+          onClick={toggleCamera}
+          className="flex items-center justify-center w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 hover:border-zinc-700 text-white transition-all hover:bg-zinc-800/80"
+          title={isCameraEnabled ? "Turn Off Camera" : "Turn On Camera"}
+        >
+          {isCameraEnabled ? (
+            <Video className="w-[18px] h-[18px]" />
+          ) : (
+            <VideoOff className="w-[18px] h-[18px] text-rose-500" />
+          )}
+        </button>
+
+        <button
+          onClick={toggleScreenShare}
+          className={`flex items-center justify-center w-10 h-10 rounded-full border transition-all ${
+            isScreenShareEnabled 
+              ? 'bg-violet-600 border-violet-500 hover:bg-violet-700 text-white' 
+              : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-800/80 text-white'
+          }`}
+          title={isScreenShareEnabled ? "Stop Sharing Screen" : "Share Screen"}
+        >
+          {isScreenShareEnabled ? (
+            <ScreenShareOff className="w-[18px] h-[18px]" />
+          ) : (
+            <Share className="w-[18px] h-[18px]" />
+          )}
+        </button>
+      </div>
     </div>
   );
 }

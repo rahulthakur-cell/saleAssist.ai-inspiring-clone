@@ -22,6 +22,7 @@ import {
   videoCallApi,
   videoFaqApi,
   shoppableVideoApi,
+  analyticsApi,
 } from '@/lib/api-client';
 import { getSocket } from '@/lib/socket';
 
@@ -33,6 +34,28 @@ interface Message {
 function WidgetIframeInner() {
   const searchParams = useSearchParams();
   const tenantId = searchParams.get('tenantId');
+  const fingerprint = searchParams.get('fingerprint') || 'widget_anonymous';
+
+  // Helper to send events to analytics API
+  const trackIframeEvent = async (type: string, metadata: any = {}, visitorInfo: any = {}) => {
+    if (!tenantId) return;
+    try {
+      await analyticsApi.trackEvent({
+        fingerprint,
+        type,
+        page: window.location.href,
+        referrer: typeof document !== 'undefined' ? document.referrer || '' : '',
+        metadata,
+        visitorInfo: {
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+          ...visitorInfo
+        },
+        tenantId
+      });
+    } catch (err) {
+      console.error('[Iframe Analytics] Failed to log event', err);
+    }
+  };
 
   // Widget settings
   const [config, setConfig] = useState<any>(null);
@@ -65,6 +88,9 @@ function WidgetIframeInner() {
   // Fetch initial config and data
   useEffect(() => {
     if (!tenantId) return;
+
+    // Store tenantId in localStorage for apiClient to use as X-Tenant-ID header
+    localStorage.setItem('tenantId', tenantId);
 
     const loadData = async () => {
       try {
@@ -135,6 +161,7 @@ function WidgetIframeInner() {
       const res = await aiChatApi.createSession({ title: 'Visitor Support Chat' });
       setChatSessionId(res.id);
       setMessages([{ role: 'ASSISTANT', content: 'Hello! I am your AI sales assistant. How can I help you find products or resolve issues today?' }]);
+      trackIframeEvent('CHAT_START', { sessionId: res.id });
     } catch {
       toast.error('Failed to initialize support chat');
     }
@@ -209,9 +236,28 @@ function WidgetIframeInner() {
       setCallStatus('waiting');
       setCallRoomName(res.roomName);
       toast.success('Video call requested. Connecting with an available agent...');
+      trackIframeEvent('VIDEO_CALL_REQUEST', { callId: res.id }, {
+        name: visitorName,
+        email: visitorEmail || undefined
+      });
     } catch {
       toast.error('Failed to launch video call request');
     }
+  };
+
+  const handleSelectVideo = (vid: any) => {
+    setActiveVideo(vid);
+    trackIframeEvent('VIDEO_WATCH', { videoId: vid.id, title: vid.title });
+  };
+
+  const handleHotspotClick = (hs: any) => {
+    trackIframeEvent('PRODUCT_CLICK', {
+      hotspotId: hs.id,
+      productName: hs.productName,
+      productUrl: hs.productUrl,
+      price: hs.price,
+      videoId: activeVideo?.id
+    });
   };
 
   if (loading) {
@@ -420,7 +466,7 @@ function WidgetIframeInner() {
                   {videos.map((vid) => (
                     <div
                       key={vid.id}
-                      onClick={() => setActiveVideo(vid)}
+                      onClick={() => handleSelectVideo(vid)}
                       className="group bg-zinc-900 rounded-xl border border-zinc-800/80 overflow-hidden cursor-pointer hover:border-zinc-700 transition-all"
                     >
                       <div className="aspect-video bg-black relative flex items-center justify-center">
@@ -471,6 +517,7 @@ function WidgetIframeInner() {
                         href={hs.productUrl}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={() => handleHotspotClick(hs)}
                         className="absolute w-6 h-6 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-indigo-600/90 text-white flex items-center justify-center shadow-lg hover:scale-125 transition-transform group/tag"
                         style={{
                           left: `${hs.posX || 50}%`,
