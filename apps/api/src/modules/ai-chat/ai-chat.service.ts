@@ -35,8 +35,14 @@ export class AiChatService {
         tenantId,
         visitorId: visitorId || null,
         title: dto.title || 'Support Chat Session',
-        model: 'gpt-4o',
-        systemPrompt: 'You are an AI sales assistant for our e-commerce store. Help visitors find products, answer FAQs, and collect contact details to schedule calls.',
+        model: 'gemini-2.5-flash',
+        systemPrompt: `You are SaleAssist AI, an intelligent sales assistant embedded on an e-commerce website. Your goal is to help visitors:
+1. Find the right products based on their needs and budget
+2. Answer questions about products, pricing, shipping, returns, and promotions
+3. Collect contact details (name, email, phone) to schedule follow-up calls with the sales team
+4. Recommend relevant products and upsell/cross-sell where appropriate
+
+Be concise, friendly, and professional. Always give direct, specific answers. If you don't know something specific about this store's inventory, say so honestly and offer to connect them with a sales representative. Format responses in clean markdown when helpful.`,
       },
     });
   }
@@ -75,7 +81,7 @@ export class AiChatService {
   }
 
   /**
-   * Streams token chunks from LiteLLM proxy, with direct OpenAI fallback.
+   * Streams token chunks from LiteLLM proxy, with multi-tier fallbacks.
    */
   async streamResponse(
     sessionId: string,
@@ -137,17 +143,75 @@ export class AiChatService {
 
     history.push({ role: 'user', content: userContent });
 
-    // Prepend system prompt
-    if (session.systemPrompt) {
-      history.unshift({ role: 'system', content: session.systemPrompt });
-    }
+    // Fetch real store context to enrich the system prompt
+    const storeContext = await this.loadStoreContext(tenantId);
+
+    // Prepend enriched system prompt
+    const baseSystemPrompt = session.systemPrompt || 
+      'You are SaleAssist AI, a helpful sales assistant for this e-commerce store.';
+    const enrichedSystemPrompt = storeContext
+      ? `${baseSystemPrompt}\n\n--- CURRENT STORE DATA ---\n${storeContext}`
+      : baseSystemPrompt;
+
+    history.unshift({ role: 'system', content: enrichedSystemPrompt });
 
     const subject = new Subject<any>();
 
     // Call LLM asynchronously so NestJS SSE controller can capture it
-    this.executeLlmStream(session.model, sessionId, history, subject);
+    this.executeLlmStream(session.model, sessionId, tenantId, history, subject);
 
     return subject.asObservable();
+  }
+
+  /**
+   * Loads real store context from the database to enrich AI responses.
+   */
+  private async loadStoreContext(tenantId: string): Promise<string> {
+    try {
+      await this.prisma.setTenantContext(tenantId);
+
+      // Fetch shoppable videos with hotspots (products)
+      const videos = await this.prisma.shoppableVideo.findMany({
+        where: { tenantId },
+        include: {
+          hotspots: { take: 10 },
+        },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => []);
+
+      // Fetch video FAQs
+      const faqs = await this.prisma.videoFaq.findMany({
+        where: { tenantId },
+        include: { items: { take: 5 } },
+        take: 5,
+      }).catch(() => []);
+
+      const contextParts: string[] = [];
+
+      if (videos.length > 0) {
+        const videoLines = videos.map((v: any) => {
+          const hotspotList = v.hotspots?.map((h: any) => 
+            `  - ${h.productName || 'Product'}: $${h.price || '?'} — [Product Link](${h.productUrl || '#'})`
+          ).join('\n') || '';
+          return `**Shoppable Video: ${v.title}**\nURL: ${v.videoUrl || ''}\nProducts tagged in this video:\n${hotspotList || '  (no products tagged)'}`;
+        });
+        contextParts.push('## Shoppable Video Products\n' + videoLines.join('\n\n'));
+      }
+
+      if (faqs.length > 0) {
+        const faqLines = faqs.map((f: any) => {
+          const items = f.items?.map((item: any) => `  Q: ${item.question}\n  A: Watch video explanation at ${item.videoUrl || '#'}`).join('\n') || '';
+          return `**Video FAQ Category: ${f.title}**\n${items}`;
+        });
+        contextParts.push('## Video FAQ Catalog\n' + faqLines.join('\n\n'));
+      }
+
+      return contextParts.join('\n\n');
+    } catch (err: any) {
+      this.logger.warn(`[AI Chat] Could not load store context: ${err.message}`);
+      return '';
+    }
   }
 
   /**
@@ -237,21 +301,150 @@ export class AiChatService {
     return responseText;
   }
 
-  private async executeLlmStream(sessionModel: string, sessionId: string, messages: any[], subject: Subject<any>) {
+  /**
+   * Stream from the Gemini API (non-OpenAI format).
+   */
+  private async streamFromGemini(
+    model: string,
+    messages: any[],
+    subject: Subject<any>,
+    abortSignal: AbortSignal,
+  ): Promise<string> {
+    // Convert OpenAI message format to Gemini format
+    const geminiContents = messages
+      .filter((m: any) => m.role !== 'system')
+      .map((m: any) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: typeof m.content === 'string' ? m.content : (m.content[0]?.text || '') }],
+      }));
+
+    // Ensure we don't have consecutive messages with the same role (Gemini requires alternation)
+    const dedupedContents: any[] = [];
+    for (const msg of geminiContents) {
+      if (dedupedContents.length > 0 && dedupedContents[dedupedContents.length - 1].role === msg.role) {
+        // Merge with previous message
+        dedupedContents[dedupedContents.length - 1].parts[0].text += '\n' + msg.parts[0].text;
+      } else {
+        dedupedContents.push(msg);
+      }
+    }
+
+    const systemInstruction = messages.find((m: any) => m.role === 'system')?.content;
+    const geminiBody: any = {
+      contents: dedupedContents,
+      generationConfig: { temperature: 0.7, maxOutputTokens: 2048 },
+    };
+    if (systemInstruction) {
+      geminiBody.systemInstruction = { parts: [{ text: systemInstruction }] };
+    }
+
+    const geminiRes = (await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${this.googleAiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiBody),
+        signal: abortSignal,
+      }
+    )) as any;
+
+    if (!geminiRes.ok || !geminiRes.body) {
+      const errBody = await geminiRes.json().catch(() => ({}));
+      throw new Error(errBody?.error?.message || `Gemini API status ${geminiRes.status}`);
+    }
+
+    const reader3 = geminiRes.body.getReader();
+    const decoder3 = new TextDecoder();
+    let buffer3 = '';
+    let responseText = '';
+
+    while (true) {
+      const { value, done } = await reader3.read();
+      if (done) break;
+      buffer3 += decoder3.decode(value, { stream: true });
+      const lines3 = buffer3.split('\n');
+      buffer3 = lines3.pop() || '';
+      for (const line of lines3) {
+        const cleaned = line.trim();
+        if (!cleaned || cleaned === 'data: [DONE]') continue;
+        if (cleaned.startsWith('data: ')) {
+          try {
+            const data = JSON.parse(cleaned.substring(6));
+            const token = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            if (token) {
+              responseText += token;
+              subject.next({ data: JSON.stringify({ token }) });
+            }
+          } catch { /* ignore */ }
+        }
+      }
+    }
+
+    return responseText;
+  }
+
+  private async executeLlmStream(
+    sessionModel: string,
+    sessionId: string,
+    tenantId: string,
+    messages: any[],
+    subject: Subject<any>,
+  ) {
     let responseText = '';
     
     const cleanMessages = this.cleanMessagesForLlm(messages);
     const hasImages = cleanMessages.some((m: any) => Array.isArray(m.content) && m.content.some((p: any) => p.type === 'image_url'));
-    // Use 'ai-agent' model group for cross-provider fallback (gpt-4o-mini → gpt-4o → Anthropic → Gemini)
-    // For image-heavy requests use gpt-4o since vision is not universal
+    // Use 'ai-agent' model group for cross-provider fallback
     const selectedModel = hasImages ? 'gpt-4o' : 'ai-agent';
     
     this.logger.log(`[AI Chat] Starting stream for session ${sessionId} using model group: ${selectedModel}`);
 
+    // Parse and auto-create contact details in CRM if visitor provides them
+    try {
+      const lastUserMsg = cleanMessages[cleanMessages.length - 1]?.content;
+      if (typeof lastUserMsg === 'string') {
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const phoneRegex = /(\+?\d{1,4}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
+        const emails = lastUserMsg.match(emailRegex);
+        const phones = lastUserMsg.match(phoneRegex);
+
+        if (emails && emails.length > 0) {
+          const email = emails[0].toLowerCase();
+          const phone = phones && phones.length > 0 ? phones[0] : null;
+          
+          // Try to extract name
+          let firstName = 'Visitor';
+          const nameMatch = lastUserMsg.match(/(?:my name is|i am|this is)\s+([a-zA-Z]+)(?:\s+([a-zA-Z]+))?/i);
+          if (nameMatch && nameMatch[1]) {
+            firstName = nameMatch[1];
+          }
+
+          await this.prisma.setTenantContext(tenantId);
+          const existing = await this.prisma.contact.findFirst({
+            where: { tenantId, email }
+          });
+          if (!existing) {
+            await this.prisma.contact.create({
+              data: {
+                tenantId,
+                email,
+                phone,
+                firstName,
+                source: 'AI_CHAT',
+                tags: ['AI-Captured']
+              }
+            });
+            this.logger.log(`[AI Chat] Automatically created CRM contact: ${email}`);
+          }
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`[AI Chat] Failed to auto-create contact: ${err.message}`);
+    }
+
     // ─── TIER 1: Try LiteLLM Proxy ───────────────────────────────────────────
     try {
       const controller = new AbortController();
-      // 45s timeout (LiteLLM handles its own internal retries)
       const timeoutId = setTimeout(() => controller.abort(), 45000);
 
       this.logger.log(`[AI Chat] Tier 1 — Calling LiteLLM: ${this.litellmUrl}/chat/completions with model=${selectedModel}`);
@@ -288,7 +481,6 @@ export class AiChatService {
         const controller2 = new AbortController();
         const timeoutId2 = setTimeout(() => controller2.abort(), 60000);
 
-        // Use the cheapest model that works for text, gpt-4o for images
         const directModel = hasImages ? 'gpt-4o' : 'gpt-4o-mini';
         this.logger.log(`[AI Chat] Tier 2 — Calling OpenAI directly with model=${directModel}`);
 
@@ -311,89 +503,47 @@ export class AiChatService {
       }
     }
 
-    // ─── TIER 3: Direct Google Gemini API Fallback ───────────────────────────
+    // ─── TIER 3: Direct Google Gemini API Fallback (2.5-flash first, then 2.0-flash) ──────────────────────────────
     if (this.googleAiApiKey && !hasImages) {
-      try {
-        const controller3 = new AbortController();
-        const timeoutId3 = setTimeout(() => controller3.abort(), 60000);
-        this.logger.log(`[AI Chat] Tier 3 — Calling Google Gemini directly`);
+      // Try gemini-2.5-flash first (more capable and available)
+      for (const geminiModel of ['gemini-2.5-flash', 'gemini-2.0-flash']) {
+        try {
+          const controller3 = new AbortController();
+          const timeoutId3 = setTimeout(() => controller3.abort(), 60000);
+          this.logger.log(`[AI Chat] Tier 3 — Calling Google Gemini directly with model=${geminiModel}`);
 
-        // Convert OpenAI message format to Gemini format
-        const geminiContents = cleanMessages
-          .filter((m: any) => m.role !== 'system')
-          .map((m: any) => ({
-            role: m.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: typeof m.content === 'string' ? m.content : (m.content[0]?.text || '') }],
-          }));
-        
-        const systemInstruction = cleanMessages.find((m: any) => m.role === 'system')?.content;
-        const geminiBody: any = {
-          contents: geminiContents,
-          generationConfig: { temperature: 0.7, maxOutputTokens: 1024 },
-        };
-        if (systemInstruction) {
-          geminiBody.systemInstruction = { parts: [{ text: systemInstruction }] };
-        }
+          responseText = await this.streamFromGemini(
+            geminiModel,
+            cleanMessages,
+            subject,
+            controller3.signal,
+          );
 
-        const geminiRes = (await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:streamGenerateContent?alt=sse&key=${this.googleAiApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(geminiBody),
-            signal: controller3.signal,
+          clearTimeout(timeoutId3);
+
+          if (responseText) {
+            await this.saveAssistantMessage(sessionId, responseText);
+            subject.complete();
+            return;
           }
-        )) as any;
 
-        clearTimeout(timeoutId3);
-
-        if (!geminiRes.ok || !geminiRes.body) {
-          const errBody = await geminiRes.json().catch(() => ({}));
-          throw new Error(errBody?.error?.message || `Gemini API status ${geminiRes.status}`);
+        } catch (geminiError: any) {
+          this.logger.warn(`[AI Chat] Tier 3 Gemini (${geminiModel}) failed: ${geminiError.message?.substring(0, 150)}`);
+          // Continue to next model
         }
-
-        const reader3 = geminiRes.body.getReader();
-        const decoder3 = new TextDecoder();
-        let buffer3 = '';
-
-        while (true) {
-          const { value, done } = await reader3.read();
-          if (done) break;
-          buffer3 += decoder3.decode(value, { stream: true });
-          const lines3 = buffer3.split('\n');
-          buffer3 = lines3.pop() || '';
-          for (const line of lines3) {
-            const cleaned = line.trim();
-            if (!cleaned || cleaned === 'data: [DONE]') continue;
-            if (cleaned.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(cleaned.substring(6));
-                const token = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-                if (token) {
-                  responseText += token;
-                  subject.next({ data: JSON.stringify({ token }) });
-                }
-              } catch { /* ignore */ }
-            }
-          }
-        }
-
-        await this.saveAssistantMessage(sessionId, responseText);
-        subject.complete();
-        return;
-
-      } catch (geminiError: any) {
-        this.logger.warn(`[AI Chat] Tier 3 Gemini failed: ${geminiError.message?.substring(0, 150)}, using demo mode...`);
       }
+
+      this.logger.warn(`[AI Chat] All Gemini models failed, using smart demo mode...`);
     }
 
-    // ─── TIER 4: Smart Demo Mode (all providers exhausted) ────────────────────
-    this.logger.warn(`[AI Chat] All AI providers failed — using demo mode for session ${sessionId}`);
+    // ─── TIER 4: Smart Demo Mode with Real Store Data ────────────────────────
+    this.logger.warn(`[AI Chat] All AI providers failed — using smart demo mode for session ${sessionId}`);
     const userMsg = typeof cleanMessages[cleanMessages.length - 1]?.content === 'string'
       ? cleanMessages[cleanMessages.length - 1].content as string
       : 'How can I help you?';
-    const demoResponse = this.generateDemoResponse(userMsg);
-    await this.streamErrorMessage(subject, demoResponse, 20);
+    
+    const demoResponse = await this.generateSmartDemoResponse(userMsg, tenantId, cleanMessages);
+    await this.streamErrorMessage(subject, demoResponse, 18);
     responseText = demoResponse;
 
     await this.saveAssistantMessage(sessionId, responseText.trim());
@@ -401,46 +551,217 @@ export class AiChatService {
   }
 
   /**
-   * Generates a context-aware demo response when all AI providers are unavailable.
-   * This ensures the chat UI always shows a meaningful response.
+   * Generates a smart, context-aware demo response using real store data from the DB.
+   * This runs when all AI providers are unavailable.
    */
-  private generateDemoResponse(userMessage: string): string {
+  private async generateSmartDemoResponse(userMessage: string, tenantId: string, fullHistory: any[]): Promise<string> {
     const lowerMsg = userMessage.toLowerCase();
-    
-    if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey')) {
-      return "👋 Hello! I'm your AI sales assistant. I can help you find products, answer questions about our store, and assist you with your shopping needs. What can I help you with today?";
-    }
-    if (lowerMsg.includes('product') || lowerMsg.includes('find') || lowerMsg.includes('show')) {
-      return "🛍️ I'd love to help you find the perfect product! Our store features a wide selection of items. Could you tell me more about what you're looking for? For example, what category, budget range, or specific features are you interested in?";
-    }
-    if (lowerMsg.includes('price') || lowerMsg.includes('cost') || lowerMsg.includes('how much')) {
-      return "💰 Great question about pricing! Our products range across various price points to suit different budgets. To give you accurate pricing, could you let me know which specific product or category you're interested in?";
-    }
-    if (lowerMsg.includes('ship') || lowerMsg.includes('deliver') || lowerMsg.includes('delivery')) {
-      return "🚚 We offer fast and reliable shipping! Standard delivery typically takes 3-5 business days, and express shipping is available for 1-2 business days. Free shipping is available on orders over a certain threshold. Would you like more details?";
-    }
-    if (lowerMsg.includes('return') || lowerMsg.includes('refund') || lowerMsg.includes('exchange')) {
-      return "↩️ We have a hassle-free return policy! You can return most items within 30 days of purchase for a full refund or exchange. Items must be in original condition. Would you like me to guide you through the return process?";
-    }
-    if (lowerMsg.includes('contact') || lowerMsg.includes('support') || lowerMsg.includes('help')) {
-      return "🎧 Our support team is here to help! You can reach us through this chat, email at support@example.com, or phone at 1-800-EXAMPLE. I can also schedule a video call with one of our specialists if you'd prefer. What would work best for you?";
-    }
-    if (lowerMsg.includes('discount') || lowerMsg.includes('coupon') || lowerMsg.includes('offer') || lowerMsg.includes('sale')) {
-      return "🏷️ Great news — we have some fantastic offers available! New customers get 10% off their first order. We also run seasonal sales and have a loyalty program. Would you like me to share the current promotions with you?";
-    }
-    
-    return `Thank you for your message! I'm your AI sales assistant and I'm here to help. I can assist you with:
 
-• 🔍 **Finding products** that match your needs
-• 💬 **Answering questions** about our catalog
-• 🛒 **Processing orders** and tracking deliveries  
-• 📞 **Scheduling a call** with our sales team
+    // Fetch real store data
+    let videos: any[] = [];
+    let faqs: any[] = [];
+    let liveStreamProducts: any[] = [];
+    let hotspots: any[] = [];
 
-What would you like help with today?`;
+    try {
+      await this.prisma.setTenantContext(tenantId);
+      
+      videos = await this.prisma.shoppableVideo.findMany({
+        where: { tenantId },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+      }).catch(() => []);
+
+      hotspots = await this.prisma.videoHotspot.findMany({
+        where: {
+          video: {
+            tenantId
+          }
+        },
+        include: {
+          video: true
+        }
+      }).catch(() => []);
+
+      liveStreamProducts = await this.prisma.liveStreamProduct.findMany({
+        where: {
+          liveStream: {
+            tenantId
+          }
+        },
+        include: {
+          liveStream: true
+        }
+      }).catch(() => []);
+
+      faqs = await this.prisma.videoFaq.findMany({
+        where: { tenantId },
+        include: { items: { take: 10 } },
+        take: 5,
+      }).catch(() => []);
+    } catch (err: any) {
+      this.logger.warn(`[AI Chat Demo] Error loading db context: ${err.message}`);
+    }
+
+    // Combine hotspots and live stream products
+    const allProducts: any[] = [
+      ...hotspots.map((h: any) => ({
+        name: h.productName || 'Product',
+        price: h.price ? Number(h.price) : null,
+        currency: h.currency || 'USD',
+        image: h.productImage,
+        url: h.productUrl,
+        type: 'video_product',
+        sourceTitle: h.video?.title,
+        videoUrl: h.video?.videoUrl
+      })),
+      ...liveStreamProducts.map((p: any) => ({
+        name: p.productName || 'Product',
+        price: p.price ? Number(p.price) : null,
+        currency: p.currency || 'USD',
+        image: p.productImage,
+        url: p.productUrl,
+        type: 'live_product',
+        sourceTitle: p.liveStream?.title
+      }))
+    ];
+
+    const allFaqItems = faqs.flatMap((f: any) =>
+      (f.items || []).map((item: any) => ({
+        q: item.question,
+        videoUrl: item.videoUrl,
+        thumbnailUrl: item.thumbnailUrl,
+        category: f.title
+      }))
+    );
+
+    // 1. Specific product match query
+    const words = lowerMsg.split(/[\s,?.!]+/).filter((w: string) => w.length > 3);
+    const matchedProducts = allProducts.filter((p: any) => {
+      const productNameLower = p.name.toLowerCase();
+      return words.some(word => productNameLower.includes(word));
+    });
+
+    if (matchedProducts.length > 0 && !lowerMsg.includes('price') && !lowerMsg.includes('cost')) {
+      const productLines = matchedProducts.map((p: any) => {
+        let line = `🛍️ **[${p.name}](${p.url || '#'})**`;
+        if (p.price) line += ` — **${p.currency} ${p.price}**`;
+        if (p.sourceTitle) {
+          if (p.type === 'video_product') {
+            line += `\n  *Featured in video:* [${p.sourceTitle}](${p.videoUrl || '#'})`;
+          } else {
+            line += `\n  *Featured in live stream:* ${p.sourceTitle}`;
+          }
+        }
+        return line;
+      }).join('\n\n');
+
+      return `I found these products matching your request:\n\n${productLines}\n\nWould you like more details or want to watch their product videos?`;
+    }
+
+    // 2. FAQ / Question matching
+    const matchedFaq = allFaqItems.find((item: any) => {
+      const qWords = item.q.toLowerCase().split(/[\s,?.!]+/).filter((w: string) => w.length > 3);
+      return qWords.some((word: string) => lowerMsg.includes(word));
+    });
+
+    if (matchedFaq) {
+      return `📌 **FAQ: ${matchedFaq.q}**\n\nWe have a video answer for this question! You can watch the explanation here: [Watch Video](${matchedFaq.videoUrl || '#'}) ${matchedFaq.thumbnailUrl ? `\n\n![Video FAQ Thumbnail](${matchedFaq.thumbnailUrl})` : ''}\n\nIs there anything else I can help you with?`;
+    }
+
+    // 3. Greetings
+    if (lowerMsg.includes('hello') || lowerMsg.includes('hi') || lowerMsg.includes('hey') || lowerMsg.match(/^(hi|hey|hello)\b/)) {
+      let greeting = `👋 Hello! I'm SaleAssist AI, your personal e-commerce assistant. I can help you find products, answer shipping and return questions, or schedule a live call with our sales team.`;
+      if (allProducts.length > 0) {
+        const sampleNames = allProducts.slice(0, 3).map((p: any) => `**${p.name}**`).join(', ');
+        greeting += `\n\nWe currently feature products like: ${sampleNames}.`;
+      }
+      greeting += `\n\nWhat can I help you with today?`;
+      return greeting;
+    }
+
+    // 4. Product list request
+    if (lowerMsg.includes('product') || lowerMsg.includes('show') || lowerMsg.includes('what do you sell') || lowerMsg.includes('what do you have') || lowerMsg.includes('catalog')) {
+      if (allProducts.length > 0) {
+        const productList = allProducts.slice(0, 5).map((p: any) => {
+          let itemStr = `• **[${p.name}](${p.url || '#'})**`;
+          if (p.price) itemStr += ` — ${p.currency} ${p.price}`;
+          if (p.sourceTitle) {
+            itemStr += p.type === 'video_product'
+              ? ` (Featured in: [${p.sourceTitle}](${p.videoUrl || '#'}))`
+              : ` (Featured in: ${p.sourceTitle})`;
+          }
+          return itemStr;
+        }).join('\n');
+        return `🛍️ Here are some of our featured products:\n\n${productList}\n\nWould you like more details on any of these, or are you looking for a specific category?`;
+      }
+      return `🛍️ We carry a curated selection of products. Could you tell me what category or type of product you're looking for? I'll help you find the best match!`;
+    }
+
+    // 5. Price inquiries
+    if (lowerMsg.includes('price') || lowerMsg.includes('cost') || lowerMsg.includes('how much') || lowerMsg.includes('cheap') || lowerMsg.includes('expensive')) {
+      if (allProducts.length > 0) {
+        const prices = allProducts.filter((p: any) => p.price).map((p: any) => Number(p.price));
+        if (prices.length > 0) {
+          const minPrice = Math.min(...prices);
+          const maxPrice = Math.max(...prices);
+          const productPrices = allProducts.slice(0, 5).map((p: any) =>
+            `• **[${p.name}](${p.url || '#'})**: ${p.currency} ${p.price}`
+          ).join('\n');
+          return `💰 Our products range from **${allProducts[0].currency} ${minPrice}** to **${allProducts[0].currency} ${maxPrice}**. Here is the pricing details:\n\n${productPrices}\n\nWould you like more details on a specific item?`;
+        }
+      }
+      return `💰 Our pricing varies depending on the product. To get accurate pricing for what you're interested in, could you tell me which product or category you have in mind?`;
+    }
+
+    // 6. Shipping
+    if (lowerMsg.includes('ship') || lowerMsg.includes('deliver') || lowerMsg.includes('how long')) {
+      return `🚚 **Shipping Information:**\n\n• **Standard Delivery**: 3-5 business days\n• **Express Shipping**: 1-2 business days (additional charge)\n• **Free Shipping**: Available on qualifying orders\n\nWould you like to know the shipping cost for your order?`;
+    }
+
+    // 7. Returns
+    if (lowerMsg.includes('return') || lowerMsg.includes('refund') || lowerMsg.includes('exchange') || lowerMsg.includes('cancel')) {
+      return `↩️ **Return & Refund Policy:**\n\n• **30-day return window** for most items\n• Items must be in original, unused condition\n• Full refund or exchange available\n• Contact our support team to initiate a return\n\nWould you like me to connect you with our support team to process a return?`;
+    }
+
+    // 8. Contact / support / human / live call
+    if (lowerMsg.includes('contact') || lowerMsg.includes('support') || lowerMsg.includes('speak') || lowerMsg.includes('agent') || lowerMsg.includes('human') || lowerMsg.includes('call')) {
+      return `🎧 **Connect with Our Team:**\n\nI can arrange a video call with one of our product specialists for you! Just share your:\n• **Name**\n• **Email address**\n• **Phone number** (optional)\n• **Best time to call**\n\nAlternatively, you can request a live video call directly inside the widget by clicking the "Video Call" tab!`;
+    }
+
+    // 9. Discounts
+    if (lowerMsg.includes('discount') || lowerMsg.includes('coupon') || lowerMsg.includes('offer') || lowerMsg.includes('deal') || lowerMsg.includes('promo') || lowerMsg.includes('sale')) {
+      return `🏷️ **Current Promotions:**\n\n• **New customer discount**: 10% off your first order\n• **Bundle deals**: Save when buying multiple products\n• **Seasonal sales**: Check back regularly for limited-time offers\n\nWould you like me to apply a discount to your order or share more details about our promotions?`;
+    }
+
+    // 10. Video / demo content
+    if (lowerMsg.includes('video') || lowerMsg.includes('demo') || lowerMsg.includes('watch')) {
+      if (videos.length > 0) {
+        const videoList = videos.slice(0, 5).map((v: any) => `• **[${v.title || 'Product Demo'}](${v.videoUrl || '#'})**`).join('\n');
+        return `🎬 **Our Featured Shoppable Videos:**\n\n${videoList}\n\nYou can watch these demos directly on the widget to see our products in action. Would you like more details on any featured product?`;
+      }
+      return `🎬 We have product demo videos showcasing our items in action. Would you like me to guide you to a specific product video?`;
+    }
+
+    // Default contextual response
+    const contextHint = allProducts.length > 0
+      ? `\n\nBy the way, we currently feature **${allProducts.length}** products. Would you like to explore them?`
+      : '';
+
+    return `Thank you for your message! I'm SaleAssist AI and I'm here to help.
+
+Here's what I can assist you with:
+
+• 🔍 **Find products** that match your needs and budget
+• 💬 **Answer questions** about pricing, shipping, and returns  
+• 📞 **Schedule a call** with our sales specialists
+• 🎬 **Explore product videos** and demonstrations${contextHint}
+
+What would you like help with?`;
   }
 
   /**
-   * Streams an error message word-by-word to the client.
+   * Streams a message word-by-word to the client.
    */
   private async streamErrorMessage(subject: Subject<any>, message: string, delayMs: number) {
     const words = message.split(' ');

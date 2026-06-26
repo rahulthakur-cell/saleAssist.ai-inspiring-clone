@@ -311,6 +311,7 @@ export const analyticsApi = {
   }) =>
     apiClient<any>('/analytics/events', { method: 'POST', body: data }),
   getOverview: () => apiClient<any>('/analytics/overview'),
+  getDashboard: () => apiClient<any>('/analytics/dashboard'),
   getVisitors: (limit?: number) =>
     apiClient<any>(`/analytics/visitors${limit ? `?limit=${limit}` : ''}`),
 };

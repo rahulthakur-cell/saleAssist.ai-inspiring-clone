@@ -1,75 +1,107 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { cn, formatNumber, formatCurrency, formatDuration } from '@/lib/utils';
+import { analyticsApi } from '@/lib/api-client';
+import { toast } from 'sonner';
 
-// ─── Mock Data (will be replaced with API calls) ──────
-
-const stats = [
-  {
-    name: 'Total Calls',
-    value: 1247,
-    change: +12.5,
-    icon: VideoStatsIcon,
-    color: 'from-indigo-500 to-indigo-600',
-    bgColor: 'bg-indigo-500/10',
-    textColor: 'text-indigo-600 dark:text-indigo-400',
-  },
-  {
-    name: 'Active Leads',
-    value: 342,
-    change: +8.2,
-    icon: LeadStatsIcon,
-    color: 'from-emerald-500 to-emerald-600',
-    bgColor: 'bg-emerald-500/10',
-    textColor: 'text-emerald-600 dark:text-emerald-400',
-  },
-  {
-    name: 'Revenue',
-    value: 48250,
-    change: +23.1,
-    isCurrency: true,
-    icon: RevenueStatsIcon,
-    color: 'from-violet-500 to-violet-600',
-    bgColor: 'bg-violet-500/10',
-    textColor: 'text-violet-600 dark:text-violet-400',
-  },
-  {
-    name: 'Avg. Call Duration',
-    value: 432,
-    change: -3.4,
-    isDuration: true,
-    icon: ClockStatsIcon,
-    color: 'from-amber-500 to-amber-600',
-    bgColor: 'bg-amber-500/10',
-    textColor: 'text-amber-600 dark:text-amber-400',
-  },
-];
-
-const recentActivities = [
-  { id: 1, type: 'video_call', title: 'Video call with Sarah Chen', time: '5 min ago', status: 'completed', color: 'bg-indigo-500' },
-  { id: 2, type: 'lead', title: 'New lead from widget — John D.', time: '12 min ago', status: 'new', color: 'bg-emerald-500' },
-  { id: 3, type: 'deal', title: 'Deal "Enterprise Plan" moved to Negotiation', time: '28 min ago', status: 'updated', color: 'bg-violet-500' },
-  { id: 4, type: 'stream', title: 'Live stream "Summer Collection" ended', time: '1h ago', status: 'ended', color: 'bg-amber-500' },
-  { id: 5, type: 'video_call', title: 'Missed call from visitor #4821', time: '2h ago', status: 'missed', color: 'bg-red-500' },
-  { id: 6, type: 'ai_chat', title: 'AI chat session — 14 messages', time: '3h ago', status: 'completed', color: 'bg-cyan-500' },
-];
-
-const agentPerformance = [
-  { name: 'Sarah K.', calls: 45, leads: 12, rating: 4.8, avatar: 'SK' },
-  { name: 'Mike R.', calls: 38, leads: 9, rating: 4.6, avatar: 'MR' },
-  { name: 'Emily T.', calls: 32, leads: 15, rating: 4.9, avatar: 'ET' },
-  { name: 'James L.', calls: 28, leads: 7, rating: 4.5, avatar: 'JL' },
-];
+import {
+  Video,
+  Users,
+  DollarSign,
+  Clock,
+  ArrowRight,
+  TrendingUp,
+  Bot
+} from 'lucide-react';
 
 export default function DashboardPage() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, []);
+
+  const fetchDashboardStats = async () => {
+    try {
+      const res = await analyticsApi.getDashboard();
+      if (res) {
+        setData(res);
+      }
+    } catch (err: any) {
+      toast.error('Failed to load dashboard stats');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center py-24">
+        <div className="w-8 h-8 rounded-full border-4 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+      </div>
+    );
+  }
+
+  const stats = [
+    {
+      name: 'Total Calls',
+      value: data?.stats?.totalCalls ?? 0,
+      icon: Video,
+      color: 'from-indigo-500 to-indigo-600',
+      bgColor: 'bg-indigo-500/10',
+      textColor: 'text-indigo-600 dark:text-indigo-400',
+    },
+    {
+      name: 'Active Leads',
+      value: data?.stats?.activeLeads ?? 0,
+      icon: Users,
+      color: 'from-emerald-500 to-emerald-600',
+      bgColor: 'bg-emerald-500/10',
+      textColor: 'text-emerald-600 dark:text-emerald-400',
+    },
+    {
+      name: 'Revenue',
+      value: data?.stats?.revenue ?? 0,
+      isCurrency: true,
+      icon: DollarSign,
+      color: 'from-violet-500 to-violet-600',
+      bgColor: 'bg-violet-500/10',
+      textColor: 'text-violet-600 dark:text-violet-400',
+    },
+    {
+      name: 'Avg. Call Duration',
+      value: data?.stats?.avgCallDuration ?? 0,
+      isDuration: true,
+      icon: Clock,
+      color: 'from-amber-500 to-amber-600',
+      bgColor: 'bg-amber-500/10',
+      textColor: 'text-amber-600 dark:text-amber-400',
+    },
+  ];
+
+  const recentActivities = data?.recentActivities || [];
+  const agentPerformance = data?.agentPerformance || [];
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground mt-1">
-          Welcome back! Here&apos;s an overview of your video commerce performance.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Welcome back! Here&apos;s an overview of your video commerce performance.
+          </p>
+        </div>
+        <div>
+          <button
+            onClick={() => { fetchDashboardStats(); toast.success('Stats updated'); }}
+            className="px-4 py-2 rounded-xl bg-card border border-border hover:border-violet-500/50 text-sm font-semibold transition-all"
+          >
+            Refresh Data
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -89,16 +121,6 @@ export default function DashboardPage() {
                   <div className={cn('p-2 rounded-lg', stat.bgColor)}>
                     <Icon className={cn('w-5 h-5', stat.textColor)} />
                   </div>
-                  <span
-                    className={cn(
-                      'text-xs font-semibold px-2 py-1 rounded-full',
-                      stat.change >= 0
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-red-500/10 text-red-600 dark:text-red-400',
-                    )}
-                  >
-                    {stat.change >= 0 ? '↑' : '↓'} {Math.abs(stat.change)}%
-                  </span>
                 </div>
                 <div className="text-2xl font-bold text-foreground">
                   {stat.isCurrency
@@ -120,39 +142,47 @@ export default function DashboardPage() {
         <div className="lg:col-span-2 rounded-xl border border-border bg-card">
           <div className="flex items-center justify-between p-5 border-b border-border">
             <h2 className="text-lg font-semibold text-foreground">Recent Activity</h2>
-            <button className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-              View all
-            </button>
           </div>
           <div className="divide-y divide-border">
-            {recentActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className="flex items-center gap-4 p-4 hover:bg-accent/30 transition-colors"
-              >
-                <div className={cn('w-2 h-2 rounded-full flex-shrink-0', activity.color)} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate">
-                    {activity.title}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {activity.time}
-                  </div>
-                </div>
-                <span
-                  className={cn(
-                    'text-xs font-medium px-2 py-0.5 rounded-full capitalize',
-                    activity.status === 'completed' && 'bg-emerald-500/10 text-emerald-600',
-                    activity.status === 'new' && 'bg-indigo-500/10 text-indigo-600',
-                    activity.status === 'updated' && 'bg-violet-500/10 text-violet-600',
-                    activity.status === 'ended' && 'bg-muted text-muted-foreground',
-                    activity.status === 'missed' && 'bg-red-500/10 text-red-600',
-                  )}
-                >
-                  {activity.status}
-                </span>
+            {recentActivities.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No recent activity logged yet. Live events show up here.
               </div>
-            ))}
+            ) : (
+              recentActivities.map((activity: any) => (
+                <div
+                  key={activity.id}
+                  className="flex items-center gap-4 p-4 hover:bg-accent/30 transition-colors"
+                >
+                  <div className={cn('w-2 h-2 rounded-full flex-shrink-0', activity.color)} />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      {activity.title}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {new Date(activity.time).toLocaleDateString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      'text-xs font-medium px-2 py-0.5 rounded-full capitalize',
+                      activity.status === 'completed' && 'bg-emerald-500/10 text-emerald-600',
+                      activity.status === 'new' && 'bg-indigo-500/10 text-indigo-600',
+                      activity.status === 'updated' && 'bg-violet-500/10 text-violet-600',
+                      activity.status === 'ended' && 'bg-muted text-muted-foreground',
+                      activity.status === 'missed' && 'bg-red-500/10 text-red-600',
+                    )}
+                  >
+                    {activity.status}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -160,36 +190,39 @@ export default function DashboardPage() {
         <div className="rounded-xl border border-border bg-card">
           <div className="flex items-center justify-between p-5 border-b border-border">
             <h2 className="text-lg font-semibold text-foreground">Top Agents</h2>
-            <button className="text-sm text-primary hover:text-primary/80 font-medium transition-colors">
-              View all
-            </button>
           </div>
           <div className="p-4 space-y-4">
-            {agentPerformance.map((agent, i) => (
-              <div key={agent.name} className="flex items-center gap-3">
-                <span className="w-5 text-xs text-muted-foreground font-medium">#{i + 1}</span>
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
-                  style={{
-                    backgroundColor: `hsl(${(i * 90 + 245) % 360}, 60%, 55%)`,
-                  }}
-                >
-                  {agent.avatar}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground">{agent.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {agent.calls} calls · {agent.leads} leads
+            {agentPerformance.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                No team agents added yet.
+              </div>
+            ) : (
+              agentPerformance.map((agent: any, i: number) => (
+                <div key={agent.name} className="flex items-center gap-3">
+                  <span className="w-5 text-xs text-muted-foreground font-medium">#{i + 1}</span>
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                    style={{
+                      backgroundColor: `hsl(${(i * 90 + 245) % 360}, 60%, 55%)`,
+                    }}
+                  >
+                    {agent.avatar}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-foreground">{agent.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {agent.calls} calls · {agent.leads} leads
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm font-medium text-amber-500">
+                    <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                    </svg>
+                    {agent.rating}
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-sm font-medium text-amber-500">
-                  <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
-                  {agent.rating}
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -220,19 +253,4 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
-
-// ─── Stats Icons ──────────────────────────────────────
-
-function VideoStatsIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7" /><rect width="15" height="14" x="1" y="5" rx="2" ry="2" /></svg>;
-}
-function LeadStatsIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><line x1="19" x2="19" y1="8" y2="14" /><line x1="22" x2="16" y1="11" y2="11" /></svg>;
-}
-function RevenueStatsIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="2" y2="22" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>;
-}
-function ClockStatsIcon({ className }: { className?: string }) {
-  return <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>;
 }

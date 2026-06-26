@@ -46,6 +46,13 @@ export class AnalyticsController {
     return this.analyticsService.getOverviewStats(tenantId);
   }
 
+  @Get('dashboard')
+  @RequirePermissions('video_call:view') // Agents dashboard view
+  @ApiOperation({ summary: 'Retrieve dashboard overview stats' })
+  async getDashboard(@TenantId() tenantId: string): Promise<any> {
+    return this.analyticsService.getDashboardStats(tenantId);
+  }
+
   @Get('visitors')
   @RequirePermissions('video_call:view') // Agents dashboard view
   @ApiOperation({ summary: 'Retrieve timeline logs of recent store visitors' })

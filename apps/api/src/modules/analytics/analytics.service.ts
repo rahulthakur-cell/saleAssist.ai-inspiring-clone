@@ -184,4 +184,168 @@ export class AnalyticsService {
       take: limit,
     });
   }
+
+  /**
+   * Compiles dashboard stats for home page.
+   */
+  async getDashboardStats(tenantId: string): Promise<any> {
+    await this.prisma.setTenantContext(tenantId);
+
+    // 1. Total Video Calls
+    const totalCalls = await this.prisma.videoCall.count({
+      where: { tenantId }
+    });
+
+    // 2. Active Leads
+    const activeLeads = await this.prisma.lead.count({
+      where: {
+        tenantId,
+        status: {
+          in: ['NEW', 'CONTACTED', 'QUALIFIED']
+        }
+      }
+    });
+
+    // 3. Revenue (Sum of CLOSED_WON deals)
+    const closedWonDeals = await this.prisma.deal.findMany({
+      where: {
+        tenantId,
+        stage: 'CLOSED_WON'
+      },
+      select: {
+        value: true
+      }
+    });
+    const revenue = closedWonDeals.reduce((sum, deal) => sum + Number(deal.value || 0), 0);
+
+    // 4. Avg. Call Duration (COMPLETED calls)
+    const completedCalls = await this.prisma.videoCall.findMany({
+      where: {
+        tenantId,
+        status: 'COMPLETED',
+        durationSeconds: { not: null }
+      },
+      select: {
+        durationSeconds: true
+      }
+    });
+    const totalDuration = completedCalls.reduce((sum, call) => sum + (call.durationSeconds || 0), 0);
+    const avgCallDuration = completedCalls.length > 0 ? Math.round(totalDuration / completedCalls.length) : 0;
+
+    // 5. Recent Activities (Union of recent records)
+    const [recentCalls, recentLeads, recentDeals, recentContacts] = await Promise.all([
+      this.prisma.videoCall.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 3
+      }),
+      this.prisma.lead.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 3
+      }),
+      this.prisma.deal.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 3
+      }),
+      this.prisma.contact.findMany({
+        where: { tenantId },
+        orderBy: { createdAt: 'desc' },
+        take: 3
+      })
+    ]);
+
+    const activities: any[] = [];
+
+    recentCalls.forEach(call => {
+      activities.push({
+        id: `call-${call.id}`,
+        type: 'video_call',
+        title: `Video call with ${call.visitorName || 'Visitor'} (${call.status.toLowerCase()})`,
+        time: call.createdAt,
+        status: call.status.toLowerCase() === 'completed' ? 'completed' : 'missed',
+        color: call.status === 'COMPLETED' ? 'bg-indigo-500' : 'bg-red-500'
+      });
+    });
+
+    recentLeads.forEach(lead => {
+      activities.push({
+        id: `lead-${lead.id}`,
+        type: 'lead',
+        title: `New lead: ${lead.name || lead.email || 'Visitor'} (${lead.status.toLowerCase()})`,
+        time: lead.createdAt,
+        status: 'new',
+        color: 'bg-emerald-500'
+      });
+    });
+
+    recentDeals.forEach(deal => {
+      activities.push({
+        id: `deal-${deal.id}`,
+        type: 'deal',
+        title: `Deal "${deal.title}" stage is ${deal.stage.toLowerCase()}`,
+        time: deal.createdAt,
+        status: 'updated',
+        color: 'bg-violet-500'
+      });
+    });
+
+    recentContacts.forEach(contact => {
+      activities.push({
+        id: `contact-${contact.id}`,
+        type: 'ai_chat',
+        title: `New contact created: ${contact.firstName} ${contact.lastName || ''}`,
+        time: contact.createdAt,
+        status: 'completed',
+        color: 'bg-cyan-500'
+      });
+    });
+
+    // Sort activities by time desc, take top 6
+    activities.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+    const recentActivities = activities.slice(0, 6);
+
+    // 6. Top Agents
+    const agents = await this.prisma.tenantUser.findMany({
+      where: { tenantId },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        },
+        _count: {
+          select: {
+            assignedLeads: true,
+            videoCallParticipants: true
+          }
+        }
+      },
+      take: 4
+    });
+
+    const agentPerformance = agents.map(agent => {
+      const initials = agent.user.name ? agent.user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'AG';
+      return {
+        name: agent.user.name,
+        calls: agent._count?.videoCallParticipants || 0,
+        leads: agent._count?.assignedLeads || 0,
+        rating: 4.8,
+        avatar: initials
+      };
+    });
+
+    return {
+      stats: {
+        totalCalls,
+        activeLeads,
+        revenue,
+        avgCallDuration
+      },
+      recentActivities,
+      agentPerformance
+    };
+  }
 }
