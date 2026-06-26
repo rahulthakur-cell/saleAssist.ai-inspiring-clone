@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, Logger } from '@nest
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { RedisService } from '../../common/redis/redis.service';
 import { REDIS_KEYS } from '@saleassist/shared';
+import * as crypto from 'crypto';
 
 @Injectable()
 export class TenantService {
@@ -99,5 +100,62 @@ export class TenantService {
     await this.redis.del(REDIS_KEYS.tenant(tenantId));
 
     return { message: 'Organization deleted' };
+  }
+
+  async listApiKeys(tenantId: string) {
+    return this.prisma.apiKey.findMany({
+      where: { tenantId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        keyPrefix: true,
+        permissions: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  async createApiKey(tenantId: string, data: { name: string; permissions?: string[] }) {
+    const rawKey = 'sa_' + crypto.randomBytes(24).toString('hex');
+    const keyPrefix = rawKey.substring(0, 8);
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    const apiKey = await this.prisma.apiKey.create({
+      data: {
+        tenantId,
+        name: data.name || 'Default API Key',
+        keyHash,
+        keyPrefix,
+        permissions: data.permissions || ['*'],
+      },
+    });
+
+    return {
+      id: apiKey.id,
+      name: apiKey.name,
+      keyPrefix: apiKey.keyPrefix,
+      permissions: apiKey.permissions,
+      createdAt: apiKey.createdAt,
+      rawKey,
+    };
+  }
+
+  async revokeApiKey(tenantId: string, id: string) {
+    const apiKey = await this.prisma.apiKey.findFirst({
+      where: { id, tenantId },
+    });
+
+    if (!apiKey) {
+      throw new NotFoundException('API Key not found');
+    }
+
+    await this.prisma.apiKey.delete({
+      where: { id },
+    });
+
+    return { message: 'API Key revoked successfully' };
   }
 }

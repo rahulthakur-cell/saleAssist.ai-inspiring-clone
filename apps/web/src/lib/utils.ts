@@ -45,6 +45,14 @@ export function formatRelativeTime(date: string | Date): string {
   return d.toLocaleDateString();
 }
 
+export function formatDate(date: string | Date): string {
+  return new Date(date).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

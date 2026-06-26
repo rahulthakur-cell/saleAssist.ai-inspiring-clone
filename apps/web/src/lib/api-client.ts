@@ -163,15 +163,25 @@ export const tenantApi = {
   getCurrent: () => apiClient('/tenants/current'),
   update: (data: any) => apiClient('/tenants/current', { method: 'PATCH', body: data }),
   getUsage: () => apiClient('/tenants/current/usage'),
+  delete: () => apiClient<any>('/tenants/current', { method: 'DELETE' }),
+};
+
+export const apiKeyApi = {
+  list: () => apiClient<any[]>('/tenants/api-keys'),
+  create: (data: { name: string; permissions?: string[] }) =>
+    apiClient<any>('/tenants/api-keys', { method: 'POST', body: data }),
+  revoke: (id: string) => apiClient<any>(`/tenants/api-keys/${id}`, { method: 'DELETE' }),
 };
 
 export const teamApi = {
-  listMembers: () => apiClient('/team/members'),
+  listMembers: () => apiClient<any>('/team/members'),
   invite: (data: { email: string; role: string }) =>
-    apiClient('/team/invite', { method: 'POST', body: data }),
-  removeMember: (id: string) => apiClient(`/team/members/${id}`, { method: 'DELETE' }),
-  updateRole: (id: string, data: { role: string }) =>
-    apiClient(`/team/members/${id}/role`, { method: 'PATCH', body: data }),
+    apiClient<any>('/team/invite', { method: 'POST', body: data }),
+  removeMember: (id: string) => apiClient<any>(`/team/members/${id}`, { method: 'DELETE' }),
+  updateRole: (id: string, data: { role: string; customRoleId?: string }) =>
+    apiClient<any>(`/team/members/${id}/role`, { method: 'PATCH', body: data }),
+  listInvitations: () => apiClient<any[]>('/team/invitations'),
+  revokeInvitation: (id: string) => apiClient<any>(`/team/invitations/${id}`, { method: 'DELETE' }),
 };
 
 export const userApi = {
@@ -364,6 +374,60 @@ export const contactApi = {
     customFields: Record<string, unknown>;
   }>) => apiClient<any>(`/contacts/${id}`, { method: 'PATCH', body: data }),
   delete: (id: string) => apiClient<any>(`/contacts/${id}`, { method: 'DELETE' }),
+};
+
+export const companyApi = {
+  list: (opts?: { search?: string; page?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return apiClient<any>(`/crm/companies${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: string) => apiClient<any>(`/crm/companies/${id}`),
+  create: (data: { name: string; domain?: string; industry?: string; size?: string; logo?: string }) =>
+    apiClient<any>('/crm/companies', { method: 'POST', body: data }),
+  update: (id: string, data: Partial<{ name: string; domain: string; industry: string; size: string; logo: string }>) =>
+    apiClient<any>(`/crm/companies/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => apiClient<any>(`/crm/companies/${id}`, { method: 'DELETE' }),
+};
+
+export const dealApi = {
+  list: (opts?: { search?: string; stage?: string; page?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.stage) params.set('stage', opts.stage);
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return apiClient<any>(`/crm/deals${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: string) => apiClient<any>(`/crm/deals/${id}`),
+  create: (data: { title: string; value?: number; currency?: string; stage?: string; probability?: number; expectedCloseAt?: string; companyId?: string; ownerId?: string }) =>
+    apiClient<any>('/crm/deals', { method: 'POST', body: data }),
+  update: (id: string, data: Partial<{ title: string; value: number; currency: string; stage: string; probability: number; expectedCloseAt: string; companyId: string; ownerId: string }>) =>
+    apiClient<any>(`/crm/deals/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => apiClient<any>(`/crm/deals/${id}`, { method: 'DELETE' }),
+};
+
+export const leadApi = {
+  list: (opts?: { search?: string; status?: string; source?: string; page?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.status) params.set('status', opts.status);
+    if (opts?.source) params.set('source', opts.source);
+    if (opts?.page) params.set('page', String(opts.page));
+    if (opts?.limit) params.set('limit', String(opts.limit));
+    const qs = params.toString();
+    return apiClient<any>(`/leads${qs ? `?${qs}` : ''}`);
+  },
+  get: (id: string) => apiClient<any>(`/leads/${id}`),
+  create: (data: { name?: string; email?: string; phone?: string; company?: string; message?: string; source?: string; status?: string; score?: number; assignedToId?: string }) =>
+    apiClient<any>('/leads', { method: 'POST', body: data }),
+  update: (id: string, data: Partial<{ name: string; email: string; phone: string; company: string; message: string; source: string; status: string; score: number; assignedToId: string }>) =>
+    apiClient<any>(`/leads/${id}`, { method: 'PATCH', body: data }),
+  delete: (id: string) => apiClient<any>(`/leads/${id}`, { method: 'DELETE' }),
 };
 
 export { apiClient, ApiError };

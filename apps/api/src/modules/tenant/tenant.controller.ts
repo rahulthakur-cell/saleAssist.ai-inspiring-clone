@@ -1,9 +1,11 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Delete,
   Body,
+  Param,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
@@ -45,5 +47,32 @@ export class TenantController {
     @CurrentUser('sub') userId: string,
   ) {
     return this.tenantService.delete(tenantId, userId);
+  }
+
+  @Get('api-keys')
+  @RequirePermissions('settings:manage')
+  @ApiOperation({ summary: 'List organization API keys' })
+  async listApiKeys(@TenantId() tenantId: string) {
+    return this.tenantService.listApiKeys(tenantId);
+  }
+
+  @Post('api-keys')
+  @RequirePermissions('settings:manage')
+  @ApiOperation({ summary: 'Create a new API key' })
+  async createApiKey(
+    @TenantId() tenantId: string,
+    @Body() body: { name: string; permissions?: string[] },
+  ) {
+    return this.tenantService.createApiKey(tenantId, body);
+  }
+
+  @Delete('api-keys/:id')
+  @RequirePermissions('settings:manage')
+  @ApiOperation({ summary: 'Revoke an API key' })
+  async revokeApiKey(
+    @TenantId() tenantId: string,
+    @Param('id') id: string,
+  ) {
+    return this.tenantService.revokeApiKey(tenantId, id);
   }
 }
