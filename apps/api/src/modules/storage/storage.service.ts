@@ -71,6 +71,43 @@ export class StorageService implements OnModuleInit {
     return this.minioClient.presignedPutObject(this.bucketName, objectName, expirySeconds);
   }
 
+  /**
+   * Generates a time-limited presigned GET URL for reading/streaming an object.
+   * Default 6 hours — enough for a full viewing session.
+   */
+  async getPresignedGetUrl(objectName: string, expirySeconds = 21600): Promise<string> {
+    if (!this.minioClient) {
+      throw new Error('Storage service is not configured. MinIO client failed to initialize.');
+    }
+    return this.minioClient.presignedGetObject(this.bucketName, objectName, expirySeconds);
+  }
+
+  /**
+   * Extracts the objectName from a legacy full MinIO URL.
+   * Returns null if the URL is not a recognized MinIO URL.
+   */
+  extractObjectName(storedUrl: string): string | null {
+    try {
+      const url = new URL(storedUrl);
+      const parts = url.pathname.split('/').filter(Boolean);
+      // Path format: /bucketName/objectName... -> skip bucket, join rest
+      if (parts.length >= 2) {
+        return parts.slice(1).join('/');
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  getStreamUrl(objectName: string): string {
+    let apiUrl = this.configService.get<string>('API_URL', 'http://localhost:4000');
+    if (apiUrl.endsWith('/')) {
+      apiUrl = apiUrl.slice(0, -1);
+    }
+    return `${apiUrl}/api/v1/storage/stream/${objectName}`;
+  }
+
   async listObjects(prefix: string): Promise<Array<{ name: string; size: number; lastModified: Date; etag?: string; contentType?: string }>> {
     if (!this.minioClient) {
       throw new Error('Storage service is not configured. MinIO client failed to initialize.');
@@ -129,6 +166,9 @@ export class StorageService implements OnModuleInit {
     const port = this.configService.get<number>('MINIO_PORT', 9000);
     const useSSL = this.configService.get<string>('MINIO_USE_SSL', 'false') === 'true';
     const protocol = useSSL ? 'https' : 'http';
-    return `${protocol}://${endpoint}:${port}/${this.bucketName}/${objectName}`;
+    const defaultPort = useSSL ? 443 : 80;
+    // Don't append default ports to avoid browser URL issues (e.g. https://host:443/...)
+    const portSuffix = Number(port) === defaultPort ? '' : `:${port}`;
+    return `${protocol}://${endpoint}${portSuffix}/${this.bucketName}/${objectName}`;
   }
 }

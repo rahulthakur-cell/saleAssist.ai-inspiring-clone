@@ -11,6 +11,7 @@ import {
   X,
   FileVideo,
   Upload,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { shoppableVideoApi, storageApi } from '@/lib/api-client';
@@ -55,6 +56,17 @@ export default function ShoppableVideosPage() {
       toast.error('Failed to load videos list');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteVideo = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this shoppable video? This action is permanent.')) return;
+    try {
+      await shoppableVideoApi.delete(id);
+      toast.success('Shoppable video deleted successfully');
+      fetchVideos();
+    } catch {
+      toast.error('Failed to delete shoppable video');
     }
   };
 
@@ -106,7 +118,7 @@ export default function ShoppableVideosPage() {
       await shoppableVideoApi.create({
         title,
         description: description || undefined,
-        videoUrl: presignedRes.publicUrl,
+        videoUrl: (presignedRes as any).streamUrl || presignedRes.publicUrl,
         displayType,
       });
 
@@ -200,6 +212,17 @@ export default function ShoppableVideosPage() {
                 }`}>
                   {vid.status}
                 </span>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteVideo(vid.id);
+                  }}
+                  className="absolute top-3 right-3 p-2 rounded-lg bg-black/60 hover:bg-rose-600 text-white hover:text-white backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all shadow-md duration-200"
+                  title="Delete Video"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
 
               {/* Title & Description */}

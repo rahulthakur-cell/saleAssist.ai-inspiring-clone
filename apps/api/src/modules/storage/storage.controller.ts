@@ -1,9 +1,9 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Get, Param, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StorageService } from './storage.service';
 import { PresignedUrlDto } from './dto/presigned-url.dto';
 import { JwtAuthGuard, RbacGuard } from '../../common/guards';
-import { TenantId } from '../../common/decorators';
+import { TenantId, Public } from '../../common/decorators';
 import { nanoid } from 'nanoid';
 
 @ApiTags('Storage')
@@ -29,11 +29,30 @@ export class StorageController {
 
     const uploadUrl = await this.storageService.getPresignedUploadUrl(objectName);
     const publicUrl = this.storageService.getPublicUrl(objectName);
+    const streamUrl = this.storageService.getStreamUrl(objectName);
 
     return {
       uploadUrl,
       publicUrl,
+      streamUrl,
       objectName,
     };
+  }
+
+  @Get('stream/:tenantId/:fileName')
+  @Public()
+  @ApiOperation({ summary: 'Redirects to a fresh presigned S3 GET URL for streaming/download' })
+  async streamFile(
+    @Param('tenantId') tenantId: string,
+    @Param('fileName') fileName: string,
+    @Res() res: any,
+  ) {
+    const objectName = `${tenantId}/${fileName}`;
+    try {
+      const presignedGetUrl = await this.storageService.getPresignedGetUrl(objectName);
+      return res.redirect(presignedGetUrl);
+    } catch (err: any) {
+      return res.status(404).json({ message: 'File not found or storage error', error: err.message });
+    }
   }
 }

@@ -5,6 +5,7 @@ import { ShoppableVideoStatus } from '@saleassist/database';
 import { InjectQueue } from '@nestjs/bull';
 import type { Queue } from 'bull';
 import { SearchService } from '../search/search.service';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class ShoppableVideoService {
@@ -14,7 +15,19 @@ export class ShoppableVideoService {
     private readonly prisma: PrismaService,
     @InjectQueue('video-transcode') private readonly videoQueue: Queue,
     private readonly searchService: SearchService,
+    private readonly storageService: StorageService,
   ) {}
+
+  private resolveVideoUrl(video: any): any {
+    if (!video) return video;
+    if (video.videoUrl) {
+      const objectName = this.storageService.extractObjectName(video.videoUrl);
+      if (objectName) {
+        video.videoUrl = this.storageService.getStreamUrl(objectName);
+      }
+    }
+    return video;
+  }
 
   /**
    * Creates a draft Shoppable Video and triggers transcoding background job.
@@ -101,13 +114,18 @@ export class ShoppableVideoService {
   /**
    * Lists shoppable videos for a tenant.
    */
-  async listVideos(tenantId: string, limit = 20, page = 1): Promise<any> {
-    await this.prisma.setTenantContext(tenantId);
+  async listVideos(tenantId: string | undefined, limit = 20, page = 1): Promise<any> {
+    if (tenantId) {
+      await this.prisma.setTenantContext(tenantId);
+    }
     const offset = (page - 1) * limit;
+
+    // Only filter by tenantId when it is provided
+    const where = tenantId ? { tenantId } : {};
 
     const [data, total] = await Promise.all([
       this.prisma.shoppableVideo.findMany({
-        where: { tenantId },
+        where,
         orderBy: { createdAt: 'desc' },
         take: limit,
         skip: offset,
@@ -115,13 +133,11 @@ export class ShoppableVideoService {
           hotspots: true,
         },
       }),
-      this.prisma.shoppableVideo.count({
-        where: { tenantId },
-      }),
+      this.prisma.shoppableVideo.count({ where }),
     ]);
 
     return {
-      data,
+      data: data.map(video => this.resolveVideoUrl(video)),
       meta: {
         total,
         page,
@@ -134,11 +150,16 @@ export class ShoppableVideoService {
   /**
    * Gets details of a specific video.
    */
-  async getVideo(videoId: string, tenantId: string): Promise<any> {
-    await this.prisma.setTenantContext(tenantId);
+  async getVideo(videoId: string, tenantId: string | undefined): Promise<any> {
+    if (tenantId) {
+      await this.prisma.setTenantContext(tenantId);
+    }
+
+    // When accessed publicly (no tenantId), look up by ID only
+    const where = tenantId ? { id: videoId, tenantId } : { id: videoId };
 
     const video = await this.prisma.shoppableVideo.findFirst({
-      where: { id: videoId, tenantId },
+      where,
       include: {
         hotspots: {
           orderBy: { startTime: 'asc' },
@@ -148,7 +169,7 @@ export class ShoppableVideoService {
 
     if (!video) throw new NotFoundException('Shoppable video not found');
 
-    return video;
+    return this.resolveVideoUrl(video);
   }
 
   /**

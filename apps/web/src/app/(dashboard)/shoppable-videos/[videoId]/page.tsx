@@ -65,6 +65,7 @@ export default function VideoHotspotEditorPage() {
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [videoError, setVideoError] = useState(false);
 
   useEffect(() => {
     if (videoId) {
@@ -101,10 +102,21 @@ export default function VideoHotspotEditorPage() {
       if (isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.play();
+        videoRef.current.play().catch(() => {
+          // Autoplay blocked by browser — just update state
+          setIsPlaying(false);
+        });
       }
       setIsPlaying(!isPlaying);
     }
+  };
+
+  const handleVideoError = () => {
+    setVideoError(true);
+  };
+
+  const handleVideoCanPlay = () => {
+    setVideoError(false);
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -212,13 +224,31 @@ export default function VideoHotspotEditorPage() {
             onClick={handleCanvasClick}
             className="flex-1 w-full max-h-[75vh] flex justify-center items-center relative overflow-hidden cursor-crosshair"
           >
-            <video
-              ref={videoRef}
-              src={video.videoUrl}
-              onTimeUpdate={handleVideoTimeUpdate}
-              onLoadedMetadata={handleVideoLoadedMetadata}
-              className="max-w-full max-h-full rounded-lg object-contain pointer-events-none"
-            />
+            {videoError ? (
+              <div className="flex flex-col items-center justify-center gap-3 text-zinc-500 py-10">
+                <svg className="w-12 h-12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                <span className="text-sm font-medium">Video failed to load. The file may have moved or the URL has changed.</span>
+                <button onClick={() => { setVideoError(false); if (videoRef.current) { videoRef.current.load(); } }} className="px-4 py-1.5 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg">
+                  Retry
+                </button>
+              </div>
+            ) : (
+              <video
+                key={video.videoUrl}
+                ref={videoRef}
+                src={video.videoUrl}
+                crossOrigin="anonymous"
+                preload="metadata"
+                playsInline
+                onTimeUpdate={handleVideoTimeUpdate}
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                onError={handleVideoError}
+                onCanPlay={handleVideoCanPlay}
+                className="max-w-full max-h-full rounded-lg object-contain pointer-events-none"
+              />
+            )}
 
             {/* Render Absolute Hotspot Overlays */}
             {activeHotspots.map((spot) => (
