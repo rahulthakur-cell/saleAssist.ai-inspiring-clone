@@ -559,6 +559,12 @@ export default function VideoFaqPage() {
               src={activeVideoUrl}
               controls
               autoPlay
+              onError={(e) => {
+                const target = e.currentTarget;
+                if (target.error?.code) {
+                  console.warn('Video FAQ player error:', target.error.message);
+                }
+              }}
               className="w-full h-full object-contain"
             />
           </div>

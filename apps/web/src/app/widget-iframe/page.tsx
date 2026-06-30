@@ -497,15 +497,25 @@ function WidgetIframeInner() {
                 </button>
 
                 {/* Interactive video viewport */}
-                <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-zinc-800">
-                  <video
-                    ref={videoPlayerRef}
-                    src={activeVideo.videoUrl}
-                    controls
-                    autoPlay
-                    onTimeUpdate={handleTimeUpdate}
-                    className="w-full h-full object-contain"
-                  />
+                <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-zinc-800 flex items-center justify-center">
+                  {activeVideo.videoUrl ? (
+                    <video
+                      ref={videoPlayerRef}
+                      src={activeVideo.videoUrl}
+                      controls
+                      autoPlay
+                      onTimeUpdate={handleTimeUpdate}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.error?.code) {
+                          console.warn('Widget video error:', target.error.message);
+                        }
+                      }}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-xs text-zinc-500">No video source available</div>
+                  )}
 
                   {/* Hotspots layer */}
                   {activeVideo.hotspots?.map((hs: any) => {
@@ -553,13 +563,23 @@ function WidgetIframeInner() {
                 >
                   <ArrowLeft className="w-4.5 h-4.5" /> Back to FAQ List
                 </button>
-                <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-zinc-800">
-                  <video
-                    src={activeFaqVideo}
-                    controls
-                    autoPlay
-                    className="w-full h-full object-contain"
-                  />
+                <div className="relative aspect-video bg-black rounded-xl overflow-hidden border border-zinc-800 flex items-center justify-center">
+                  {activeFaqVideo ? (
+                    <video
+                      src={activeFaqVideo}
+                      controls
+                      autoPlay
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        if (target.error?.code) {
+                          console.warn('Widget FAQ video error:', target.error.message);
+                        }
+                      }}
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <div className="text-xs text-zinc-500">No FAQ video available</div>
+                  )}
                 </div>
               </div>
             ) : faqs.length === 0 ? (

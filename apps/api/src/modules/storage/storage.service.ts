@@ -84,10 +84,18 @@ export class StorageService implements OnModuleInit {
 
   /**
    * Extracts the objectName from a legacy full MinIO URL.
-   * Returns null if the URL is not a recognized MinIO URL.
+   * Returns null if:
+   * - The URL is not a recognized MinIO URL
+   * - The URL is already a stream URL (to prevent double-processing / path doubling)
    */
   extractObjectName(storedUrl: string): string | null {
     try {
+      // If the URL already points to our stream endpoint, do NOT re-process it.
+      // Doing so would treat '/api' as the bucket name and produce a corrupted
+      // doubled path like: /api/v1/storage/stream/v1/storage/stream/tenantId/file.mp4
+      if (storedUrl.includes('/api/v1/storage/stream/')) {
+        return null;
+      }
       const url = new URL(storedUrl);
       const parts = url.pathname.split('/').filter(Boolean);
       // Path format: /bucketName/objectName... -> skip bucket, join rest
@@ -100,6 +108,10 @@ export class StorageService implements OnModuleInit {
     }
   }
 
+  /**
+   * Returns the local API stream URL for a given objectName.
+   * The stream endpoint redirects to a fresh presigned S3 GET URL.
+   */
   getStreamUrl(objectName: string): string {
     let apiUrl = this.configService.get<string>('API_URL', 'http://localhost:4000');
     if (apiUrl.endsWith('/')) {
@@ -156,6 +168,42 @@ export class StorageService implements OnModuleInit {
       this.logger.error(`Failed to delete object ${objectName}: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Streams an object from MinIO. Supports partial content (HTTP range requests).
+   */
+  async streamObject(
+    objectName: string,
+    rangeStart?: number,
+    rangeEnd?: number,
+  ): Promise<{ stream: any; size: number; contentType: string }> {
+    if (!this.minioClient) {
+      throw new Error('Storage service is not configured.');
+    }
+
+    const stat = await this.minioClient.statObject(this.bucketName, objectName);
+    const statAny = stat as any;
+    const contentType =
+      statAny.contentType ||
+      stat.metaData?.['content-type'] ||
+      stat.metaData?.['Content-Type'] ||
+      'application/octet-stream';
+    const size = stat.size;
+
+    if (rangeStart !== undefined) {
+      const end = rangeEnd !== undefined ? rangeEnd : size - 1;
+      const stream = await this.minioClient.getPartialObject(
+        this.bucketName,
+        objectName,
+        rangeStart,
+        end - rangeStart + 1,
+      );
+      return { stream, size, contentType };
+    }
+
+    const stream = await this.minioClient.getObject(this.bucketName, objectName);
+    return { stream, size, contentType };
   }
 
   /**

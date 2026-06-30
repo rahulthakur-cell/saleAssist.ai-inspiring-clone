@@ -14,7 +14,13 @@ async function bootstrap() {
   });
 
   // ─── Security ───────────────────────────────────────────
-  app.use(helmet());
+  // Note: crossOriginResourcePolicy must be 'cross-origin' because the
+  // API (port 4000) serves media/video resources consumed by the frontend
+  // (port 3000). Different ports = different origins under browser rules.
+  // 'same-origin' (Helmet default) would block <video> elements from loading.
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  }));
   app.use(compression());
   app.use(cookieParser());
 

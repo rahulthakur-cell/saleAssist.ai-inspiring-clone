@@ -1,9 +1,19 @@
-import { Controller, Post, Body, UseGuards, HttpCode, HttpStatus, Get, Param, Res } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Param,
+  Res,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StorageService } from './storage.service';
 import { PresignedUrlDto } from './dto/presigned-url.dto';
 import { JwtAuthGuard, RbacGuard } from '../../common/guards';
-import { TenantId, Public } from '../../common/decorators';
+import { Public, TenantId } from '../../common/decorators';
 import { nanoid } from 'nanoid';
 
 @ApiTags('Storage')
@@ -23,7 +33,7 @@ export class StorageController {
     // Sanitize filename to avoid folder escape
     const fileExtension = dto.fileName.split('.').pop();
     const sanitizedName = `${nanoid(16)}.${fileExtension}`;
-    
+
     // Namespace object under the tenant folder
     const objectName = `${tenantId}/${sanitizedName}`;
 
@@ -39,6 +49,12 @@ export class StorageController {
     };
   }
 
+  /**
+   * GET /storage/stream/:tenantId/:fileName
+   * Redirects to a fresh presigned S3 GET URL for streaming/download.
+   * This avoids exposing raw MinIO credentials to the frontend while supporting
+   * HTTP Range requests (browsers need these for video seek/scrub support).
+   */
   @Get('stream/:tenantId/:fileName')
   @Public()
   @ApiOperation({ summary: 'Redirects to a fresh presigned S3 GET URL for streaming/download' })
@@ -50,9 +66,13 @@ export class StorageController {
     const objectName = `${tenantId}/${fileName}`;
     try {
       const presignedGetUrl = await this.storageService.getPresignedGetUrl(objectName);
+      // Required: browsers block cross-origin media loads unless CORP is set to cross-origin.
+      // Without this, <video> elements on localhost:3000 cannot load from localhost:4000.
+      res.set('Cross-Origin-Resource-Policy', 'cross-origin');
       return res.redirect(presignedGetUrl);
     } catch (err: any) {
       return res.status(404).json({ message: 'File not found or storage error', error: err.message });
     }
   }
 }
+

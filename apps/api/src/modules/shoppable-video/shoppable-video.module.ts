@@ -23,3 +23,4 @@ import { StorageModule } from '../storage/storage.module';
   exports: [ShoppableVideoService],
 })
 export class ShoppableVideoModule {}
+

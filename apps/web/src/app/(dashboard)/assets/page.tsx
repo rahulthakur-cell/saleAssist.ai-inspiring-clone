@@ -168,8 +168,14 @@ export default function AssetsPage() {
                         <div className="w-10 h-10 rounded-lg bg-background border border-border flex items-center justify-center overflow-hidden">
                           {displayType === 'image' ? (
                             <img src={asset.url} alt={asset.name} className="w-full h-full object-cover" />
-                          ) : displayType === 'video' ? (
-                            <video src={asset.url} className="w-full h-full object-cover" />
+                          ) : displayType === 'video' && asset.url ? (
+                            <video
+                              src={asset.url}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                              }}
+                            />
                           ) : (
                             <span className="text-violet-500">{getIcon(displayType)}</span>
                           )}
